@@ -286,9 +286,25 @@ def render_morphology(rows, is_deponent):
 _APPARATUS_PUNCT_RE = re.compile(r'\s*(?:[;:.,]\s*){2,}')
 _EDGE_PUNCT_RE = re.compile(r'^[\s;:.,]+|[\s;:.,]+$')
 
+# extract_glosses.py extracts each <sense> node's own text in isolation, but
+# some L&S entries open a parenthetical remark in the entry preamble (before
+# any <sense> starts) and only close it inside the first <sense> -- e.g. amo:
+# "<pos>v. a.</pos> (amasso = ... Mull.: <sense>...) [cf. ... union], to
+# like, to love, ...". The extracted sense then starts with a dangling ")",
+# often behind other leftover separator punctuation (": ; ; ) , to like").
+# A leading ")" is unambiguously an orphan -- a genuine balanced parenthetical
+# note (810 senses start with a real "(...)" remark, e.g. "(rare) to run")
+# always starts with "(", never ")" -- so only ")" (not "(") is stripped from
+# the front, and only "(" (not ")") from the back, interleaved with ordinary
+# separator punctuation so both can be peeled together in one pass.
+_LEADING_ORPHAN_PAREN_RE = re.compile(r'^(?:[\s;:.,]|\))+')
+_TRAILING_ORPHAN_PAREN_RE = re.compile(r'(?:[\s;:.,]|\()+$')
+
 
 def _clean_gloss_text(text):
     text = text.replace('*', '')
+    text = _LEADING_ORPHAN_PAREN_RE.sub('', text)
+    text = _TRAILING_ORPHAN_PAREN_RE.sub('', text)
     text = _APPARATUS_PUNCT_RE.sub('; ', text)
     text = _EDGE_PUNCT_RE.sub('', text)
     return re.sub(r'\s{2,}', ' ', text).strip()

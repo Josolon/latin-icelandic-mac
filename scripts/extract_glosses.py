@@ -50,9 +50,24 @@ OUT_DB_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "ls_defs.db"
 _EXCLUDE_TAGS = {"cit", "bibl", "foreign", "etym", "sense"}
 
 
+# L&S's own convention for a bracketed etymology aside within a sense's
+# running text, e.g. "amo ... ) [cf. Sanscr. kam = to love; ... with the
+# radical notion of likeness, union], to like, to love, ..." -- the
+# bracketed span is etymology, not part of the English gloss, but it isn't
+# wrapped in <etym>/<foreign>/any excludable tag (see _EXCLUDE_TAGS above),
+# it's just plain text inside the <sense> node. Left in, it leaked words
+# like "union" into the translated Icelandic glossary (e.g. "samband" for
+# amo) even after headword-POS filtering, since "union" is a perfectly
+# good noun translation for a phrase that just happens to not be part of
+# the actual definition. No nested brackets occur in ls.db (verified), so
+# a single non-nested pass is sufficient.
+_ETYM_BRACKET_RE = re.compile(r"\[[^\[\]]*\]")
+
+
 def _clean_text(text):
     if not text:
         return ""
+    text = _ETYM_BRACKET_RE.sub(" ", text)
     return re.sub(r"\s+", " ", text.replace("\t", " ")).strip()
 
 
