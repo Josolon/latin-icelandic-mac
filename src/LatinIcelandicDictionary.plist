@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>English</string>
+	<key>CFBundleIdentifier</key>
+	<string>com.jonatansolon.dictionary.LatinIcelandic</string>
+	<key>CFBundleName</key>
+	<string>Latin-Icelandic</string>
+	<key>CFBundleDisplayName</key>
+	<string>Latína (L&amp;S) - Íslenska</string>
+	<key>CFBundleShortVersionString</key>
+	<string>1.0</string>
+	<key>DCSDictionaryCopyright</key>
+	<string>L&amp;S data: Lewis &amp; Short, A Latin Dictionary (Perseus Digital Library). Icelandic glosses bridge-translated via the CLARIN IS-EN glossary. Curated by Jonatan Solon.</string>
+	<key>DCSDictionaryManufacturerName</key>
+	<string>Jónatan Sólon</string>
+	<key>DCSDictionaryFrontMatterWindowSize</key>
+	<string>0.5</string>
+</dict>
+</plist>

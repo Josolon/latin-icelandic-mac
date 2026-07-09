@@ -1,0 +1,94 @@
+English-Icelandic/Icelandic-English glossary 21.09
+--------------------------------------------------
+http://hdl.handle.net/20.500.12537/144
+
+Compiled by:
+Steinþór Steingrímsson - The Árni Magnússon Institute for Icelandic Studies
+Luke James Obrien - Reykjavik University
+Finnur Ágúst Ingimundarson - The Árni Magnússon Institute for Icelandic Studies
+Árni Davíð Magnússon - The Árni Magnússon Institute for Icelandic Studies
+Þórdís Dröfn Andrésdóttir - The Árni Magnússon Institute for Icelandic Studies
+Inga Guðrún Eiríksdóttir - The Árni Magnússon Institute for Icelandic Studies
+
+Distributed under CC-BY 4.0 (https://creativecommons.org/licenses/by/4.0/)
+
+
+The Package
+===========
+This package contains an Icelandic-English/English-Icelandic glossary. The glossary, published in tab separated format in IS-EN_glossary.tsv, included in this package, contains 232.950 Icelandic-English pairs. As some lexical items have multiple translations in the other language the collection contains 105.442 different Icelandic items, of which 84.812 are single words and 20.630 multiword units, and 116.744 different English lexical items, of which 45.147 are unique English words and 71.597 multiword units.
+
+The glossary was built using automatic and manual methods. Automatic methods were used to build a candidate list, which was manually checked by human annotators or compared to available manually curated Icelandic-English/English-Icelandic dictionaries and word lists and accepted if they were on these lists. These Dictionaries/Word lists are: Icelandic-English Wiktionary, title of pages in Icelandic-English Wikipedia, the Icelandic Term Bank and the Terminology Database of the Ministry of Foreign Affairs. The annotators who evaluated pairs not in these pre-existing dictionaries were to follow one simple rule, if the word in either language could be translated to the other word, in any environment the annotators could think of, the pair should be accepted as valid.
+
+
+File Structure
+==============
+1 - Icelandic
+2 - English
+3 - Icelandic POS
+4 - English POS
+5 - single-/multiword unit
+6 - embeddings
+7 - machine translation
+8 - pivoting through dictionaries
+9 - parallel corpora
+10 - comparable corpora
+11 - synthetic corpora
+12 - Icelandic/English score
+13 - English/Icelandic score
+
+
+Columns 1-5 contain the words and information on the words, including POS-information which was added automatically after the manual evaluation, using lookup tables from Wiktionary and Database of Icelandic Morphology. Column 5 indicates whether the word columns contain one or more words. Columns 6-11 contain information on whether, and how often, each type of automatic lexicon induction method produced the candidate pair. Columns 12-13 contain word pair scores, estimating how common a translation of a source word into the target language is compared to other translations of the same word. Column 12 has scores for Icelandic into English and column 12 scores for English into Icelandic. For each source word, the sum of translation scores should be equal to 1.0.
+
+
+Automatic methods
+=================
+- Embeddings (column 6)
+Corpora of Icelandic news texts from the Icelandic Gigaword Corpus (IGC) (Steingrímsson et al. 2018) and English news texts (Newscrawl) were used to train two word2vec models (Mikolov et al. 2013), one for English and the other to Icelandic. Vecmap (Artetxe et al. 2018) was then used to build cross-lingual word embeddings by mapping the models to a common vector space. Equivalence candidates were extracted by collecting the closest translation candidates using cosine distance. Source words for each language were chosen by selecting the most frequent words in the Icelandic and English corpora, and by selecting the equivalence candidates that the model had the lowest cosine distance for.
+
+- Machine Translation (column 7)
+Four different machine translation systems were used to translate a list of Icelandic words into English. Google Translate (May 2020), Microsoft Translator (May 2020), OPUS-MT (Tiedemann and Thottingal, 2020) and M2M100 (Fan et al. 2020). Most of the words are the Icelandic part of the ISLEX/LEXIA-dictionary (Úlfarsdóttir, 2014). The target languages in ISLEX/LEXIA, Danish, Swedish, Norwegian, Finnish and French were also translated using the same MT systems (but different models), and the source Icelandic word then paired to the translation of the target words.
+
+- Pivoting through dictionaries (column 8)
+We used dictionaries with Icelandic as a source language and pivoted through an intermediate language into English. The dictionaries used were the ISLEX-dictionaries (Icelandic-Danish/Swedish/Norwegian/Finnish), LEXIA (Icelandic-French) and dict.cc (Icelandic-German) for Icelandic into intermediary languages, and Apertium (Finnish/Norwegian/French/Swedish-English), dict.cc (Finnish/Norwegian/Swedish/French-English for intermediary languages into English.
+
+- Parallel Corpora (column 9)
+We collected equivalence candidates from ParIce, the English-Icelandic parallel corpus, using word alignments. Word alignments were created using the CombAlign-tool (Steingrímsson et al, 2021a), which uses majority voting by multiple word aligners: eflomal (Ostling and Tiedemann, 2016), fast_align (Dyer et al, 2013), AWESoME (Dou and Neubig, 2021), Giza++ (Och and Ney, 2000) and SimAlign (Masoud et al, 2020). Before alignment the texts were POS-tagged and lemmatized and the lemmatized sentences used for word alignments. A word alignment score was calculated using the confidence score introduced in (Steingrímsson et al, 2021b). The score was used to estimate the likelihood of a pair being a good equivalence candidate, and high-scoring candidates selected for manual evaluation.
+
+- Comparable Corpora (column 10)
+We collected equivalence candidates from English-Icelandic comparable corpura, using word alignments. The corpora used were WikiMatrix (Schwenk et al, 2021), Paracrawl 7.1 and Paracrawl 8 (Bañón et al, 2020). As for the parallel corpus, word alignments were created using the CombAlign-tool after tagging and lemmatization and a word alignment score calculated using a confidence score. As before, the score was used to estimate the likelihood of a pair being a good equivalence candidate, and high-scoring candidates selected for manual evaluation.
+
+- Synthetic Corpora (column 11)
+We collected equivalence candidates from synthetic corpora, back-translations generated using a transformer network (Símonarson et al. 2020). The English sentences, translated into Icelandic, were retrieved from Wikipedia, Newscrawl and Europarl and the Icelandic sentences, translated into English, were sourced from the IGC. The candidates were collected using CombAlign after POS-tagging and lemmatization and a word alignment score calculated using a confidence score. As before, the score was used to estimate the likelihood of a pair being a good equivalence candidate, and high-scoring candidates selected for manual evaluation.
+
+
+References
+==========
+Mikel Artetxe, Gorka Labaka, and Eneko Agirre. 2018. A robust self-learning method for fully unsupervised cross-lingual mappings of word embeddings.
+
+Marta Bañón, Pinzhen Chen, Barry Haddow, Kenneth Heafield, Hieu Hoang, Miquel Esplà-Gomis, Mikel L. Forcada, Amir Kamran, Faheem Kirefu, Philipp Koehn, Sergio Ortiz Rojas, Leopoldo Pla Sempere, Gema Ramírez-Sánchez, Elsa Sarrías, Marek Strelec, Brian Thompson, William Waites, Dion Wiggins, Jaume Zaragoza. 2020. ParaCrawl: Web-Scale Acquisition of Parallel Corpora.
+
+Zi-Yi Dou and Graham Neubig. 2021. Word Alignment by Fine-tuning Embeddings on Parallel Corpora. 
+
+Chris Dyer, Victor Chahuneau, and Noah A. Smith. 2013. A Simple, Fast, and Effective Reparameterization of IBM Model 2.
+
+Angela Fan, Shruti Bhosale, Holger Schwenk, Zhiyi Ma, Ahmed El-Kishky, Siddharth Goyal, Mandeep Baines, Onur Celebi, Guillaume Wenzek, Vishrav Chaudhary, Naman Goyal, Tom Birch, Vitaliy Liptchinsky, Sergey Edunov, Edouard Grave, Michael Auli, Armand Joulin. 2020. Beyond English-Centric Multilingual Machine Translation.
+
+Jalili Sabet Masoud, Philipp Dufter, François Yvon, and Hinrich Schütze. 2020. SimAlign: High Quality Word Alignments Without Parallel Training DataUsing Static and Contextualized Embeddings
+
+Tomas Mikolov, Kai Chen, Greg Corrado and Jeffrey Dean. 2013. Efficient Estimation of Word Representations in Vector Space.
+
+Franz Josef Och and Hermann Ney. 2000. ImprovedStatistical Alignment Models.
+
+Holger Schwenk, Vishrav Chaudhary, Shuo Sun, Hongyu Gong, and Francisco Guzmán. 2021. WikiMatrix: Mining 135M Parallel  Sentences in 1620 Language Pairs from Wikipedia
+
+Símonarson, Haukur Barri; Snæbjarnarson, Vésteinn and Þorsteinsson, Vilhjálmur. 2020. En-Is Synthetic Parallel Corpus. CLARIN-IS, http://hdl.handle.net/20.500.12537/70. 
+
+Steinþór Steingrímsson, Sigrún Helgadóttir, Eiríkur Rögnvaldsson, Starkaður Barkarson and Jón Guðnason. Risamálheild: A Very Large Icelandic Text Corpus. 
+
+Steinþór Steingrímsson, Hrafn Loftsson and Andy Way. 2021a. CombAlign: a Tool for Obtaining High-Quality Word Alignments.
+
+Steinþór Steingrímsson, Hrafn Loftsson and Andy Way. 2021b. PivotAlign: Leveraging High-Precision Word Alignments for Bilingual Dictionary Inference.
+
+Þórdís Úlfarsdóttir. 2014. ISLEX - a Multilingual Web Dictionary.
+
+Robert Östling and Jörg Tiedemann. 2016. Efficient wordalignment with Markov Chain Monte Carlo.

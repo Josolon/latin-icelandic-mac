@@ -1,0 +1,169 @@
+/* LatinIcelandicDictionary.css */
+
+body {
+    font-family: -apple-system, "Helvetica Neue", "Lucida Grande", sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+    color: #1a1a1a;
+}
+
+/* --- Entry Heading --- */
+h1.entry-lemma {
+    font-family: "New Athena Unicode", "Noto Serif", Georgia, serif;
+    font-size: 1.6em;
+    font-weight: bold;
+    color: #1a1a4e;
+    margin: 0 0 6px 0;
+    padding-bottom: 4px;
+    border-bottom: 1px solid #c0c8e0;
+    letter-spacing: 0.02em;
+}
+
+/* --- Definition Block --- */
+div.definition {
+    margin: 6px 0 12px 0;
+    padding-left: 4px;
+}
+
+/* Icelandic bridge gloss (primary) */
+p.gloss-is {
+    margin: 0 0 4px 0;
+}
+
+p.gloss-missing {
+    color: #999;
+    font-style: italic;
+}
+
+/* Original English L&S gloss -- always shown, since the Icelandic side is a
+   partial glossary (some senses have no confident glossary match) rather
+   than a complete translation */
+p.gloss-en {
+    margin: 0;
+    color: #666;
+    font-size: 0.88em;
+    font-style: italic;
+}
+
+/* --- Sense Blocks --- */
+div.sense {
+    margin-top: 3px;
+    margin-bottom: 3px;
+    line-height: 1.55em;
+}
+
+/* Sense numbering marker */
+span.sense-num {
+    font-weight: bold;
+    color: #8b1111;
+    font-size: 0.98em;
+    margin-right: 2px;
+}
+
+/* Inline sense content */
+span.sense-body {
+    color: #1a1a1a;
+}
+
+/* Latin word inline */
+b.la-word {
+    color: #002266;
+    font-size: 1.04em;
+    font-family: "New Athena Unicode", "Noto Serif", Georgia, serif;
+}
+
+/* Bibliographic citations */
+span.citation {
+    color: #666;
+    font-size: 0.9em;
+}
+
+/* --- Morphology Section --- */
+div.morph-section {
+    margin-top: 14px;
+    background-color: #f7f9ff;
+    border: 1px solid #c8d4ee;
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+p.morph-label {
+    margin: 0;
+    padding: 5px 10px;
+    font-size: 0.86em;
+    font-weight: 600;
+    color: #2a4a9a;
+    background-color: #edf1fb;
+    border-bottom: 1px solid #c8d4ee;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+}
+
+/* Secondary (rare) principal parts get a lighter divider row */
+.morph-secondary-header td {
+    font-size: 0.82em;
+    font-style: italic;
+    color: #666;
+    padding: 3px 8px;
+    background-color: #f0f4fc;
+    border-top: 1px solid #dde6f8;
+    border-bottom: 1px dashed #dde6f8;
+}
+
+/* --- Morphology Table --- */
+.morphology-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.84em;
+    margin: 0;
+}
+
+.morphology-table th {
+    background-color: #e8edf8;
+    color: #2a3a6a;
+    font-weight: 600;
+    padding: 5px 8px;
+    text-align: left;
+    border-bottom: 1px solid #c8d4ee;
+}
+
+.morphology-table td {
+    padding: 4px 8px;
+    vertical-align: top;
+    border-bottom: 1px solid #eef0f8;
+    color: #1a1a1a;
+    font-family: "New Athena Unicode", "Noto Serif", Georgia, serif;
+}
+
+.morphology-table td.case-label {
+    font-family: -apple-system, "Helvetica Neue", sans-serif;
+    font-weight: 600;
+    color: #2a4a8a;
+    font-size: 0.95em;
+    white-space: nowrap;
+    width: 90px;
+}
+
+.morphology-table tr:last-child td {
+    border-bottom: none;
+}
+
+.morphology-table tr:nth-child(even) td {
+    background-color: #f7f9ff;
+}
+
+/* Principal parts headline */
+div.principal-parts {
+    padding: 8px 10px;
+    border-bottom: 1px solid #c8d4ee;
+}
+
+span.pp-label {
+    font-weight: 600;
+    color: #2a4a9a;
+    font-size: 0.86em;
+}
+
+span.pp-forms {
+    margin-left: 6px;
+}

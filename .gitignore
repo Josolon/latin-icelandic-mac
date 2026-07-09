@@ -1,0 +1,23 @@
+# macOS system clutter
+.DS_Store
+
+# Heavy source databases (rebuild from latin-mac / download glossary)
+data/ls.db
+data/morph.db
+data/ls_defs.db
+data/ls_is.db
+data/IS-EN_glossary.tsv
+
+# Generated dictionary source XML (~55MB forward, smaller reverse)
+src/LatinIcelandicDictionary.xml
+src/IcelandicLatinDictionary.xml
+
+# Apple Dictionary Development Kit build artifacts
+src/objects/
+src/*.dictionary
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
