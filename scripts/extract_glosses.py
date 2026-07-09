@@ -77,11 +77,9 @@ def sense_own_text(node):
     return _clean_text("".join(parts))
 
 
-def extract_entry_senses(fragment):
+def extract_entry_senses(entry_el):
     """Returns a list of non-empty English gloss-candidate strings, one per
-    <sense> node in the entry (any level), in document order. Returns []
-    on unparseable fragments (caller counts these for visibility)."""
-    entry_el = ET.fromstring(fragment)
+    <sense> node in the entry (any level), in document order."""
     senses = []
     for node in entry_el.iter():
         if _local_tag(node) != "sense":
@@ -90,6 +88,51 @@ def extract_entry_senses(fragment):
         if text:
             senses.append(text)
     return senses
+
+
+# Maps L&S's <pos> abbreviation (e.g. "v. a.", "P. a.") to the CLARIN
+# glossary's coarse English POS categories (data/IS-EN_glossary.READ.ME,
+# column 4: Noun/Verb/Adjective/Adverb/.../NULL) -- used as en_pos_hint in
+# bridge_lookup.top_candidates() so that e.g. amo ("v. a.") prefers the verb
+# candidate "elska" over noun candidates like "samband" that also gloss
+# some sense of "to love"/"like". Checked in order; the first match wins,
+# since e.g. "v. n. and a." must hit the verb rule before anything else.
+_VERB_POS_RE = re.compile(r"^v\.\s|^v\.$")
+_ADJ_POS = {"adj.", "Adj.", "P. a.", "num. adj.", "pron. adj."}
+
+
+def latin_pos_to_glossary_pos(pos_text, gen_text):
+    """pos_text/gen_text: raw <pos>/<gen> element text (or None). Returns
+    one of the glossary's EN-POS strings, or None if no confident mapping
+    exists (most commonly: no <pos>/<gen> tag on the entry at all, e.g.
+    cross-references like "abax, v. abacus" or bare participle stubs)."""
+    if pos_text:
+        if _VERB_POS_RE.match(pos_text):
+            return "Verb"
+        if pos_text in _ADJ_POS:
+            return "Adjective"
+        if pos_text.startswith("adv."):
+            return "Adverb"
+        if pos_text == "interj.":
+            return "Interjection"
+        if pos_text == "prep.":
+            return "Preposition"
+        if pos_text == "Subst.":
+            return "Noun"
+    if gen_text in ("f.", "m.", "n.", "comm.", "com."):
+        return "Noun"
+    return None
+
+
+def extract_entry_pos(fragment_el):
+    """Reads the entry's own top-level <pos>/<gen> child (not a nested
+    sense's), mirroring how L&S structures entryFree: pos/gen sit as direct
+    siblings of orth/itype, before the sense hierarchy starts."""
+    pos_el = fragment_el.find("pos")
+    gen_el = fragment_el.find("gen")
+    pos_text = (pos_el.text or "").strip() if pos_el is not None else None
+    gen_text = (gen_el.text or "").strip() if gen_el is not None else None
+    return latin_pos_to_glossary_pos(pos_text, gen_text)
 
 
 def main():
@@ -105,7 +148,8 @@ def main():
             id INTEGER PRIMARY KEY,
             lemma TEXT NOT NULL,
             lemma_normalized TEXT NOT NULL,
-            definitions TEXT NOT NULL
+            definitions TEXT NOT NULL,
+            pos TEXT
         )"""
     )
     out_conn.execute("CREATE INDEX idx_def_lemma ON definitions(lemma)")
@@ -119,8 +163,11 @@ def main():
     parse_fail = 0
     no_senses = 0
     for i, (key, lemma, fragment) in enumerate(rows):
+        pos = None
         try:
-            senses = extract_entry_senses(fragment)
+            entry_el = ET.fromstring(fragment)
+            senses = extract_entry_senses(entry_el)
+            pos = extract_entry_pos(entry_el)
         except ET.ParseError:
             parse_fail += 1
             senses = []
@@ -135,17 +182,17 @@ def main():
         # build_xml.py via latin_normalize.search_variants().
         lemma_display = lemma or key
         lemma_normalized = norm_key(lemma or key)
-        buffer.append((i + 1, lemma_display, lemma_normalized, json.dumps(senses, ensure_ascii=False)))
+        buffer.append((i + 1, lemma_display, lemma_normalized, json.dumps(senses, ensure_ascii=False), pos))
 
         if len(buffer) >= 5000:
-            out_conn.executemany("INSERT INTO definitions VALUES (?,?,?,?)", buffer)
+            out_conn.executemany("INSERT INTO definitions VALUES (?,?,?,?,?)", buffer)
             out_conn.commit()
             buffer.clear()
             elapsed = time.time() - start
             print(f"  ... {i + 1}/{total} ({elapsed:.0f}s elapsed)")
 
     if buffer:
-        out_conn.executemany("INSERT INTO definitions VALUES (?,?,?,?)", buffer)
+        out_conn.executemany("INSERT INTO definitions VALUES (?,?,?,?,?)", buffer)
         out_conn.commit()
 
     print(f"Done in {time.time() - start:.0f}s.")

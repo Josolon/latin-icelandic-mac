@@ -69,9 +69,14 @@ def _is_ls_apparatus(phrase):
     return False
 
 
-def translate_sense(sense_text):
+def translate_sense(sense_text, pos_hint=None):
     """Returns (icelandic_or_none, any_translated, all_translated) for one
-    extracted L&S sense string."""
+    extracted L&S sense string. pos_hint (a glossary EN-POS string, e.g.
+    "Verb") comes from the headword's own <pos>/<gen> tag in ls.db (see
+    extract_glosses.latin_pos_to_glossary_pos) and steers
+    translate_glossary_phrase toward the matching word class -- e.g. amo
+    ("v. a.") prefers "elska" (Verb) over "samband" (Noun), which also
+    glosses some sense of "to love"/"like" in the bridge glossary."""
     phrases = [p for p in _SPLIT_RE.split(sense_text) if p.strip()]
     phrases = [p for p in phrases if not _is_ls_apparatus(p)]
     if not phrases:
@@ -80,7 +85,7 @@ def translate_sense(sense_text):
     translated = []
     hits = 0
     for phrase in phrases:
-        is_text = translate_glossary_phrase(phrase)
+        is_text = translate_glossary_phrase(phrase, pos_hint)
         if is_text:
             translated.append(is_text)
             hits += 1
@@ -107,7 +112,7 @@ def main():
     )
     out.execute("CREATE INDEX idx_def_is_lemma ON definitions_is(lemma)")
 
-    rows = defs.execute("SELECT id, lemma, lemma_normalized, definitions FROM definitions").fetchall()
+    rows = defs.execute("SELECT id, lemma, lemma_normalized, definitions, pos FROM definitions").fetchall()
     total = len(rows)
     print(f"Building Icelandic glossary for {total} L&S entries...")
 
@@ -116,7 +121,7 @@ def main():
     fully_count = 0
     any_count = 0
     none_count = 0
-    for i, (rid, lemma, lemma_norm, defs_json) in enumerate(rows):
+    for i, (rid, lemma, lemma_norm, defs_json, pos_hint) in enumerate(rows):
         try:
             senses = json.loads(defs_json)
         except (json.JSONDecodeError, TypeError):
@@ -126,7 +131,7 @@ def main():
         entry_fully = True
         entry_any = False
         for sense in senses:
-            is_text, any_ok, all_ok = translate_sense(sense)
+            is_text, any_ok, all_ok = translate_sense(sense, pos_hint)
             entry_fully = entry_fully and all_ok
             entry_any = entry_any or any_ok
             if is_text:
