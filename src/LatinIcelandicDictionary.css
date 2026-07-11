@@ -174,3 +174,15 @@ span.is-equiv {
     font-size: 0.88em;
     font-style: italic;
 }
+
+/* Per-inflected-form stub entries (lsform_*) -- classical Latin grammar
+   parse, muted, sitting above the Icelandic parse of the rendering */
+.tag-cl {
+    color: #8a6a3a;
+    font-size: 0.9em;
+}
+/* Icelandic grammar parse of the rendering, on a stub entry */
+.tag-is {
+    color: #2a4a8a;
+    font-size: 0.95em;
+}
