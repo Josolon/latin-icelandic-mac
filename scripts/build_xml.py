@@ -197,11 +197,62 @@ def _active_periphrasis(tense, person, number, is_word, verb_slots):
     return None
 
 
+# Icelandic has just one viðtengingarháttur (subjunctive) mood, split into a
+# present-stem and a past-stem form -- Latin's four subjunctive tenses have
+# to collapse onto that split. Sequence-of-tense convention (this project's
+# own judgment call, not independently classicist-verified the way the
+# Greek project's subjunctive/optative mapping was): primary sequence
+# (present, perfect subjunctive) -> Icelandic present viðtengingarháttur;
+# secondary sequence (imperfect, pluperfect subjunctive) -> Icelandic past
+# viðtengingarháttur. Spot-check before treating as authoritative.
+_SUBJ_SEQUENCE = {'pres': 'nt', 'perf': 'nt', 'imperf': 'th', 'plup': 'th'}
+
+# Closed-class "vera" subjunctive paradigm (sé/séum.../væri/værum...), for
+# the þolmynd (passive) subjunctive periphrasis -- "(þótt) hann sé
+# menntaður" / "(þótt) hann væri menntaður".
+_VERA_SUBJ = {
+    'nt': {('1st', 'sg'): 'sé', ('2nd', 'sg'): 'sért', ('3rd', 'sg'): 'sé',
+           ('1st', 'pl'): 'séum', ('2nd', 'pl'): 'séuð', ('3rd', 'pl'): 'séu'},
+    'th': {('1st', 'sg'): 'væri', ('2nd', 'sg'): 'værir', ('3rd', 'sg'): 'væri',
+           ('1st', 'pl'): 'værum', ('2nd', 'pl'): 'væruð', ('3rd', 'pl'): 'væru'},
+}
+# Greek subjunctive/optative render as Icelandic viðtengingarháttur, which an
+# Icelandic subordinator governs -- "(þótt) ég mennti" reads as a real
+# subjunctive clause ("though I educate"). Latin's subjunctive is used the
+# same way in dependent clauses, so the same convention applies here.
+_SUBJ_PREFIX = '(þótt) '
+
+
+def _subjunctive_periphrasis(tense, latin_voice, person, number, verb_slots, is_deponent):
+    """Icelandic viðtengingarháttur rendering for one Latin subjunctive
+    (tense, latin_voice, person, number) cell. Returns None if the tense has
+    no sequence-of-tense mapping (_SUBJ_SEQUENCE), or the specific BÍN cell
+    needed isn't attested."""
+    bucket = _SUBJ_SEQUENCE.get(tense)
+    pron = PRONOUNS_IS.get((person, number))
+    pdigit = _PERSON_DIGIT.get(person)
+    if not bucket or not pron or not pdigit:
+        return None
+    if is_deponent or latin_voice == 'act':
+        bin_tense = 'pres' if bucket == 'nt' else 'past'
+        form = verb_slots.get(f'gm_subj_{bin_tense}_{pdigit}{number}')
+        return f'{_SUBJ_PREFIX}{pron} {form}' if form else None
+    if latin_voice == 'pass':
+        ptcp_forms = [verb_slots.get(_PTCP_SLOT[(g, number)]) for g in ('masculine', 'feminine', 'neuter')]
+        if not all(ptcp_forms):
+            return None
+        vera_form = _VERA_SUBJ[bucket].get((person, number))
+        if not vera_form:
+            return None
+        return f'{_SUBJ_PREFIX}{pron} {vera_form} {"/".join(ptcp_forms)}'
+    return None
+
+
 def icelandic_verb_clause(tense, latin_voice, is_deponent, is_word, verb_slots,
-                          person='1st', number='sg'):
-    """The Icelandic indicative rendering for one (tense, latin_voice) cell
-    of the Latin verb table, at the given person/number (defaults to 1sg,
-    the main table's citation form; the per-inflected-form stubs pass the
+                          person='1st', number='sg', mood='ind'):
+    """The Icelandic rendering for one (mood, tense, latin_voice) cell of
+    the Latin verb table, at the given person/number (defaults to 1sg, the
+    main table's citation form; the per-inflected-form stubs pass the
     form's own actual person/number). Deponent verbs are morphologically
     passive in Latin but active in meaning -- routed to the active germynd
     slots regardless of latin_voice, same as the Latin-side principal-parts
@@ -210,6 +261,8 @@ def icelandic_verb_clause(tense, latin_voice, is_deponent, is_word, verb_slots,
     this gloss word, or the specific cell isn't attested."""
     if not verb_slots:
         return None
+    if mood == 'subj':
+        return _subjunctive_periphrasis(tense, latin_voice, person, number, verb_slots, is_deponent)
     if is_deponent or latin_voice == 'act':
         return _active_periphrasis(tense, person, number, is_word, verb_slots)
     if latin_voice == 'pass':
@@ -217,19 +270,72 @@ def icelandic_verb_clause(tense, latin_voice, is_deponent, is_word, verb_slots,
     return None
 
 
+def icelandic_infinitive_clause(tense, latin_voice, is_deponent, is_word, verb_slots):
+    """Icelandic rendering for one Latin infinitive (tense, latin_voice)
+    cell. Only present and perfect are ever attested as single-word forms in
+    morph.db (Latin's future infinitive is itself periphrastic, "amaturus
+    esse", so never appears as one token) -- other tenses simply have no
+    infinitives dict entry to call this for. Passive is only rendered for
+    the present (Latin's perfect passive infinitive, "amatus esse", is
+    likewise periphrastic and never a single attested word)."""
+    if is_deponent or latin_voice == 'act':
+        if tense == 'pres':
+            return f'að {is_word}' if is_word else None
+        if tense == 'perf':
+            supine = verb_slots.get('gm_supine')
+            return f'að hafa {supine}' if supine else None
+        return None
+    if latin_voice == 'pass' and tense == 'pres':
+        ptcp_forms = [verb_slots.get(_PTCP_SLOT[(g, 'sg')]) for g in ('masculine', 'feminine', 'neuter')]
+        if not all(ptcp_forms):
+            return None
+        return f'að vera {"/".join(ptcp_forms)}'
+    return None
+
+
+def icelandic_participle_form(case, gender, number, tense, latin_voice, is_deponent, verb_slots):
+    """Icelandic rendering for one Latin participle cell. Only the perfect
+    passive participle's NOMINATIVE forms have a matching BÍN slot at all
+    (_PTCP_SLOT / build_is_morphology.py's _PARTICIPLE_TAGS only extracts
+    the nominative sg/pl per gender, not a full oblique-case declension) --
+    other cases, and the present-active/future-active participles (no
+    Icelandic morphological equivalent captured by this project's BÍN
+    extraction), render tag-only, no guessed form. Deponent verbs' perfect
+    participle is ACTIVE in meaning despite passive form ("hortatus" =
+    "having urged", not "having been urged") -- the only rendering path
+    available assumes a passive sense, so deponents render nothing here
+    rather than a wrong-meaning translation."""
+    if is_deponent or latin_voice != 'pass' or tense != 'perf' or case != 'nom':
+        return None
+    is_gender = {'masc': 'masculine', 'fem': 'feminine', 'neut': 'neuter'}.get(gender)
+    if not is_gender or not verb_slots:
+        return None
+    return verb_slots.get(_PTCP_SLOT.get((is_gender, number)))
+
+
+def icelandic_supine_form(is_purpose, is_word):
+    """Icelandic rendering for the purpose ("-um", til að X) supine only --
+    the respect ("-u") supine's idiomatic Icelandic equivalent (used with
+    adjectives of ease/difficulty, "auðvelt yfirstíga") isn't a fixed
+    pronoun+verb construction the way every other rendering in this file is,
+    so it's left tag-only rather than guessed."""
+    if not is_purpose or not is_word:
+        return None
+    return f'til að {is_word}'
+
+
 # ---------------------------------------------------------------------------
 # Per-inflected-form stub entries -- ported from ancient-greek-icelandic-mac's
 # lsjform_ stub mechanism (see bin-morphology-recap.md for the design). Every
-# distinct Latin form of a curated cell (noun/adjective case x number,
-# indicative verb tense x voice x person x number) gets its own small
+# distinct Latin form of a curated cell -- noun/adjective case x number,
+# verb tense x voice x mood x person x number (indicative and subjunctive),
+# infinitive tense x voice, gerundive case x gender x number, supine, and
+# participle case x gender x number x tense x voice -- gets its own small
 # d:entry, title = the exact attested spelling, linking back to the lemma
 # entry and showing that cell's grammatical parse (classical Latin
 # abbreviation over an Icelandic one) plus the BÍN-matched Icelandic
-# rendering, if any. Deliberately scoped to those two curated grids -- NOT
-# infinitives, gerundive, supine, or participles, which stay accessible only
-# via the main lemma entry (participles in particular aren't classified into
-# any grid at all today; see classify_and_grid's `if 'part' in tokset:
-# continue`).
+# rendering, if any (blank where this project has no real inflection data to
+# render from, e.g. oblique-case participles -- see icelandic_participle_form).
 #
 # Two parallel grammar tags per cell, same convention as the Greek project:
 # the classical/international one (the abbreviations every classicist
@@ -240,9 +346,11 @@ def icelandic_verb_clause(tense, latin_voice, is_deponent, is_word, verb_slots,
 _CLASSICAL_ABBR = {
     'case': {'nom': 'nom.', 'gen': 'gen.', 'dat': 'dat.', 'acc': 'acc.',
              'abl': 'abl.', 'voc': 'voc.', 'loc': 'loc.'},
+    'gender': {'masc': 'masc.', 'fem': 'fem.', 'neut': 'neut.'},
     'person': {'1st': '1.', '2nd': '2.', '3rd': '3.'},
     'number': {'sg': 'sg.', 'pl': 'pl.'},
-    'mood': {'ind': 'ind.'},
+    'mood': {'ind': 'ind.', 'subj': 'coni.', 'inf': 'inf.',
+             'part': 'part.', 'gerundive': 'ger.'},
     'tense': {'pres': 'praes.', 'imperf': 'impf.', 'fut': 'fut.',
               'perf': 'perf.', 'plup': 'plusqu.', 'futperf': 'futperf.'},
     'voice': {'act': 'act.', 'pass': 'pass.'},
@@ -250,26 +358,32 @@ _CLASSICAL_ABBR = {
 _ICELANDIC_ABBR = {
     'case': {'nom': 'nf.', 'gen': 'ef.', 'dat': 'þgf.', 'acc': 'þf.',
              'abl': 'svf.', 'voc': 'áf.', 'loc': 'staðarf.'},
+    'gender': {'masc': 'kk.', 'fem': 'kvk.', 'neut': 'hk.'},
     'person': {'1st': '1. p.', '2nd': '2. p.', '3rd': '3. p.'},
     'number': {'sg': 'et.', 'pl': 'ft.'},
-    'mood': {'ind': 'frh.'},
+    'mood': {'ind': 'frh.', 'subj': 'vth.', 'inf': 'nh.',
+             'part': 'lh.', 'gerundive': 'ger.'},
     'tense': {'pres': 'nt.', 'imperf': 'dþt.', 'fut': 'frt.',
               'perf': 'nlt.', 'plup': 'þlt.', 'futperf': 'þframt.'},
     'voice': {'act': 'gm.', 'pass': 'þm.'},
 }
 
 
-def _grammar_tag(scheme, case=None, person=None, number=None, mood=None,
-                 tense=None, voice=None):
+def _grammar_tag(scheme, case=None, gender=None, person=None, number=None,
+                 mood=None, tense=None, voice=None):
     """One space-joined grammar tag in the given abbreviation `scheme`
-    (_CLASSICAL_ABBR or _ICELANDIC_ABBR). Canonical order: case, person,
-    number, mood, tense, voice (case/person are mutually exclusive --
-    nominal vs. verbal cells). Fields absent from a given cell are omitted."""
+    (_CLASSICAL_ABBR or _ICELANDIC_ABBR). Canonical order: case, gender,
+    person, number, mood, tense, voice (case/person are mutually exclusive
+    -- nominal vs. verbal cells; gender only applies to participles/
+    gerundives here, adjectives/nouns don't track gender per cell). Fields
+    absent from a given cell are omitted."""
     def ab(cat, val):
         return scheme[cat].get(val, str(val))
     parts = []
     if case:
         parts.append(ab('case', case))
+    if gender:
+        parts.append(ab('gender', gender))
     if person:
         parts.append(ab('person', person))
     if number:
@@ -288,20 +402,51 @@ def _dual_tag(**kw):
     return _grammar_tag(_CLASSICAL_ABBR, **kw), _grammar_tag(_ICELANDIC_ABBR, **kw)
 
 
-def _verb_tag(person, number, tense, latin_voice, is_deponent):
-    """(classical_tag, icelandic_tag) for one indicative verb form. The
-    classical tag always shows the REAL attested Latin voice (passive for a
-    deponent's own morphology); the Icelandic tag shows the voice the
-    rendering actually routed through (germynd for a deponent, since
-    icelandic_verb_clause renders deponents via the active slots) -- same
-    asymmetry the main table's deponent principal-parts label already
-    acknowledges."""
+def _verb_tag(mood, person, number, tense, latin_voice, is_deponent):
+    """(classical_tag, icelandic_tag) for one finite verb form (indicative
+    or subjunctive). The classical tag always shows the REAL attested Latin
+    voice (passive for a deponent's own morphology); the Icelandic tag shows
+    the voice the rendering actually routed through (germynd for a
+    deponent, since icelandic_verb_clause renders deponents via the active
+    slots) -- same asymmetry the main table's deponent principal-parts
+    label already acknowledges."""
     classical = _grammar_tag(_CLASSICAL_ABBR, person=person, number=number,
-                             mood='ind', tense=tense, voice=latin_voice)
+                             mood=mood, tense=tense, voice=latin_voice)
     icel_voice = 'act' if (is_deponent or latin_voice == 'act') else latin_voice
     icelandic = _grammar_tag(_ICELANDIC_ABBR, person=person, number=number,
-                             mood='ind', tense=tense, voice=icel_voice)
+                             mood=mood, tense=tense, voice=icel_voice)
     return classical, icelandic
+
+
+def _infinitive_tag(tense, latin_voice, is_deponent):
+    classical = _grammar_tag(_CLASSICAL_ABBR, mood='inf', tense=tense, voice=latin_voice)
+    icel_voice = 'act' if (is_deponent or latin_voice == 'act') else latin_voice
+    icelandic = _grammar_tag(_ICELANDIC_ABBR, mood='inf', tense=tense, voice=icel_voice)
+    return classical, icelandic
+
+
+def _participle_tag(case, gender, number, tense, latin_voice, is_deponent):
+    classical = _grammar_tag(_CLASSICAL_ABBR, case=case, gender=gender, number=number,
+                             mood='part', tense=tense, voice=latin_voice)
+    icel_voice = 'act' if (is_deponent or latin_voice == 'act') else latin_voice
+    icelandic = _grammar_tag(_ICELANDIC_ABBR, case=case, gender=gender, number=number,
+                             mood='part', tense=tense, voice=icel_voice)
+    return classical, icelandic
+
+
+def _gerundive_tag(case, gender, number):
+    return (_grammar_tag(_CLASSICAL_ABBR, case=case, gender=gender, number=number, mood='gerundive'),
+            _grammar_tag(_ICELANDIC_ABBR, case=case, gender=gender, number=number, mood='gerundive'))
+
+
+def _supine_tag(is_purpose):
+    """Morpheus tags Latin's two supines as if they were nom./dat. of a 4th-
+    declension noun (see classify_and_grid's supine_case comment) -- the tag
+    line shows the traditional supine terminology instead, since that's
+    what a classicist actually expects to read."""
+    if is_purpose:
+        return 'sup. (-um)', 'sagnb. (tilgangs)'
+    return 'sup. (-u)', 'sagnb. (viðmiðunar)'
 
 
 def _is_definite_suffix_form(indef, definite):
@@ -494,10 +639,31 @@ def join_forms(forms):
 
 
 _PERSONS = ('1st', '2nd', '3rd')
+_GENDERS = ('masc', 'fem', 'neut')
+
+
+def _combined_members(toks, vocab):
+    """Union of every '/'-combined token's members that fall in `vocab`
+    (e.g. 'nom/voc/acc' against CASES, or 'masc/fem/neut' against
+    _GENDERS) -- Morpheus collapses syncretic forms this way rather than
+    emitting one row per case/gender."""
+    out = set()
+    for t in toks:
+        if '/' in t:
+            out.update(p for p in t.split('/') if p in vocab)
+    return out
 
 
 def classify_and_grid(rows):
-    """From (form, analyses) rows build noun grid and verb principal parts."""
+    """From (form, analyses) rows, build every grid this dictionary's main
+    entries and per-inflected-form stub entries render from. Returns a dict
+    (not a positional tuple -- too many fields now to keep two call sites
+    in sync by position) with keys:
+      noun_grid, verb_parts, verb_parts_any_person, verb_subj_parts,
+      verb_subj_parts_any_person, infinitives, participle_forms, supines,
+      supine_case, gerundives, gerundive_forms, n_nominal, n_verbal,
+      verb_finite_forms.
+    """
     form_analyses = {}
     for form, analyses in rows:
         groups = ANALYSIS_GROUP_RE.findall(analyses or '')
@@ -508,15 +674,37 @@ def classify_and_grid(rows):
     noun_grid = defaultdict(lambda: defaultdict(set))
     verb_parts = defaultdict(set)
     verb_parts_any_person = defaultdict(set)
+    # Subjunctive citation cells -- same 1st-sg-preferred/any-person-fallback
+    # shape as the indicative verb_parts/verb_parts_any_person pair, feeding
+    # the main table's own "Viðtengingarháttur / Subjunctive" block.
+    verb_subj_parts = defaultdict(set)
+    verb_subj_parts_any_person = defaultdict(set)
     infinitives = defaultdict(set)
-    participles = defaultdict(set)
+    # raw_form -> set of (case, gender, number, tense, voice) -- every
+    # attested Latin participle cell (pres.act "-ans/-ens", perf.pass
+    # "-us/-a/-um", fut.act "-urus/-a/-um"). Stub-only: not surfaced in the
+    # main entry's own morphology table (no participle table exists there).
+    participle_forms = defaultdict(set)
     supines = set()
+    # raw_form -> set of {'nom', 'dat'} -- Morpheus tags Latin's two supine
+    # forms as if they were a 4th-declension noun's nom.sg ("-um", the
+    # purpose/"accusative" supine after verbs of motion) and dat.sg ("-u",
+    # the respect/"ablative" supine with adjectives of ease) rather than
+    # with real supine case names. Kept separate from the flat `supines` set
+    # (unchanged, still feeds the main table's single combined row) so stubs
+    # can tell which of the two idioms a given form is.
+    supine_case = defaultdict(set)
     gerundives = set()
-    # raw_form -> set of (tense, voice, person, number) indicative parsings --
-    # every attested person/number, not just the 1st-sg citation cell above.
-    # This is the basis for the per-inflected-form stub entries (unlike
-    # verb_parts/verb_parts_any_person, which only ever need ONE
-    # representative form per tense/voice for the main table).
+    # raw_form -> set of (case, gender, number) -- every attested gerundive
+    # cell, for stubs. `gerundives` above (unchanged) stays scoped to just
+    # the masc/nom/sg citation form the main table cites.
+    gerundive_forms = defaultdict(set)
+    # raw_form -> set of (mood, tense, voice, person, number) finite-verb
+    # parsings -- every attested person/number for both indicative and
+    # subjunctive, not just the 1st-sg citation cells above. This is the
+    # basis for the per-inflected-form stub entries (unlike verb_parts/
+    # verb_subj_parts, which only ever need ONE representative form per
+    # tense/voice for the main table).
     verb_finite_forms = defaultdict(set)
     n_nominal = n_verbal = 0
 
@@ -525,33 +713,54 @@ def classify_and_grid(rows):
             toks = g.split()
             tokset = set(toks)
             case = next((c for c in CASES if c in tokset), None)
-            combined = [t for t in toks if '/' in t and any(p in CASES for p in t.split('/'))]
+            combined_case = _combined_members(toks, CASES)
             number = 'sg' if 'sg' in tokset else ('pl' if 'pl' in tokset else None)
             tense = next((t for t in TENSES if t in tokset), None)
             voice = 'act' if 'act' in tokset else ('pass' if 'pass' in tokset else None)
             person = next((p for p in _PERSONS if p in tokset), None)
+            mood = 'subj' if 'subj' in tokset else ('ind' if 'ind' in tokset else None)
 
             if 'part' in tokset:
-                continue  # not surfaced in this glossary's morphology section
+                # Adjectival (case/gender/number) AND verbal (tense/voice) --
+                # captured for stub tagging only; see participle_forms above.
+                part_cases = combined_case or ({case} if case else set())
+                part_genders = _combined_members(toks, _GENDERS) or \
+                    ({next(gn for gn in _GENDERS if gn in tokset)} if any(gn in tokset for gn in _GENDERS) else set())
+                if part_cases and part_genders and number and tense:
+                    for c in part_cases:
+                        for gd in part_genders:
+                            participle_forms[form].add((c, gd, number, tense, voice or 'act'))
+                continue
             if 'supine' in tokset:
                 supines.add(form)
+                if 'nom' in tokset:
+                    supine_case[form].add('nom')
+                elif 'dat' in tokset:
+                    supine_case[form].add('dat')
                 continue
             if 'gerundive' in tokset:
                 is_masc = 'masc' in tokset or any('masc' in t.split('/') for t in toks if '/' in t)
                 is_nom = 'nom' in tokset or any('nom' in t.split('/') for t in toks if '/' in t)
                 if is_masc and is_nom and number == 'sg':
                     gerundives.add(form)
+                ger_cases = combined_case or ({case} if case else set())
+                ger_genders = _combined_members(toks, _GENDERS) or \
+                    ({next(gn for gn in _GENDERS if gn in tokset)} if any(gn in tokset for gn in _GENDERS) else {None})
+                if ger_cases and number:
+                    for c in ger_cases:
+                        for gd in ger_genders:
+                            gerundive_forms[form].add((c, gd, number))
                 continue
 
             if tense and 'inf' in tokset:
                 infinitives[(tense, voice or 'act')].add(form)
                 n_verbal += 1
-            elif tense and 'ind' in tokset and '1st' in tokset and number == 'sg':
+            elif tense and mood == 'ind' and '1st' in tokset and number == 'sg':
                 verb_parts[(tense, voice or 'act')].add(form)
                 if person and number:
-                    verb_finite_forms[form].add((tense, voice or 'act', person, number))
+                    verb_finite_forms[form].add(('ind', tense, voice or 'act', person, number))
                 n_verbal += 1
-            elif tense and 'ind' in tokset:
+            elif tense and mood == 'ind':
                 # No 1st-singular form attested for this tense/voice in the
                 # corpus (e.g. equito's imperfect is only attested as
                 # equitabamus, 1st pl) -- kept separately from verb_parts so
@@ -561,24 +770,46 @@ def classify_and_grid(rows):
                 # dropping it.
                 verb_parts_any_person[(tense, voice or 'act')].add(form)
                 if person and number:
-                    verb_finite_forms[form].add((tense, voice or 'act', person, number))
+                    verb_finite_forms[form].add(('ind', tense, voice or 'act', person, number))
+                n_verbal += 1
+            elif tense and mood == 'subj' and '1st' in tokset and number == 'sg':
+                verb_subj_parts[(tense, voice or 'act')].add(form)
+                if person and number:
+                    verb_finite_forms[form].add(('subj', tense, voice or 'act', person, number))
+                n_verbal += 1
+            elif tense and mood == 'subj':
+                verb_subj_parts_any_person[(tense, voice or 'act')].add(form)
+                if person and number:
+                    verb_finite_forms[form].add(('subj', tense, voice or 'act', person, number))
                 n_verbal += 1
             elif tense:
                 n_verbal += 1
 
-            if number and 'part' not in tokset and not tense:
-                if combined:
-                    for t in combined:
-                        for p in t.split('/'):
-                            if p in CASES:
-                                noun_grid[p][number].add(form)
-                                n_nominal += 1
+            if number and not tense:
+                if combined_case:
+                    for p in combined_case:
+                        noun_grid[p][number].add(form)
+                        n_nominal += 1
                 elif case:
                     noun_grid[case][number].add(form)
                     n_nominal += 1
 
-    return (noun_grid, verb_parts, verb_parts_any_person, infinitives, participles, supines,
-            gerundives, n_nominal, n_verbal, verb_finite_forms)
+    return {
+        'noun_grid': noun_grid,
+        'verb_parts': verb_parts,
+        'verb_parts_any_person': verb_parts_any_person,
+        'verb_subj_parts': verb_subj_parts,
+        'verb_subj_parts_any_person': verb_subj_parts_any_person,
+        'infinitives': infinitives,
+        'participle_forms': participle_forms,
+        'supines': supines,
+        'supine_case': supine_case,
+        'gerundives': gerundives,
+        'gerundive_forms': gerundive_forms,
+        'n_nominal': n_nominal,
+        'n_verbal': n_verbal,
+        'verb_finite_forms': verb_finite_forms,
+    }
 
 
 def render_principal_parts(verb_parts, infinitives, is_deponent):
@@ -618,11 +849,19 @@ def _is_equiv_span(is_form):
     return f' <span class="is-equiv">→ {html.escape(is_form, quote=False)}</span>'
 
 
-def render_morphology(rows, is_deponent, is_word=None, entry_pos=None,
+def render_morphology(classified, is_deponent, is_word=None, entry_pos=None,
                       verb_forms=None, noun_decl=None, adj_decl=None,
                       adj_form_lemma=None):
-    (noun_grid, verb_parts, verb_parts_any_person, infinitives, participles, supines,
-     gerundives, n_nominal, n_verbal, _verb_finite_forms) = classify_and_grid(rows)
+    noun_grid = classified['noun_grid']
+    verb_parts = classified['verb_parts']
+    verb_parts_any_person = classified['verb_parts_any_person']
+    verb_subj_parts = classified['verb_subj_parts']
+    verb_subj_parts_any_person = classified['verb_subj_parts_any_person']
+    infinitives = classified['infinitives']
+    supines = classified['supines']
+    gerundives = classified['gerundives']
+    n_nominal = classified['n_nominal']
+    n_verbal = classified['n_verbal']
     parts = []
 
     # BÍN slots for this entry's own Icelandic gloss word, if it has any.
@@ -657,6 +896,23 @@ def render_morphology(rows, is_deponent, is_word=None, entry_pos=None,
             parts.append(f'<tr><td class="case-label">{label}</td>'
                          f'<td>{act_html}</td><td>{pas_html}</td></tr>')
 
+        subj_rows = []
+        for tense in TENSES:
+            act = join_forms(verb_subj_parts.get((tense, 'act'), []) or verb_subj_parts_any_person.get((tense, 'act'), []))
+            pas = join_forms(verb_subj_parts.get((tense, 'pass'), []) or verb_subj_parts_any_person.get((tense, 'pass'), []))
+            if not act and not pas:
+                continue
+            label = f'{TENSE_LABELS_IS[tense]} – Viðtengingarháttur'
+            act_html = (html.escape(act, quote=False) if act else '—') + \
+                (_is_equiv_span(icelandic_verb_clause(tense, 'act', is_deponent, is_word, verb_slots, mood='subj')) if act else '')
+            pas_html = (html.escape(pas, quote=False) if pas else '—') + \
+                (_is_equiv_span(icelandic_verb_clause(tense, 'pass', is_deponent, is_word, verb_slots, mood='subj')) if pas else '')
+            subj_rows.append(f'<tr><td class="case-label">{label}</td>'
+                             f'<td>{act_html}</td><td>{pas_html}</td></tr>')
+        if subj_rows:
+            parts.append('<tr class="morph-secondary-header"><td colspan="3">Viðtengingarháttur / Subjunctive</td></tr>')
+            parts.extend(subj_rows)
+
         inf_rows = []
         for tense in TENSES:
             act = join_forms(infinitives.get((tense, 'act'), []))
@@ -680,7 +936,7 @@ def render_morphology(rows, is_deponent, is_word=None, entry_pos=None,
             parts.append(f'<tr><td class="case-label">Sagnbót</td>'
                         f'<td colspan="2">{html.escape(join_forms(supines), quote=False)}</td></tr>')
 
-        if not any_tense_row and not inf_rows and not gerundives and not supines and not pp_html:
+        if not any_tense_row and not subj_rows and not inf_rows and not gerundives and not supines and not pp_html:
             return ''  # nothing attested worth showing
         parts.append('</table></div>')
 
@@ -899,32 +1155,31 @@ def build_dictionary():
             xml.write('        </div>\n')
 
             is_word = _primary_gloss_word(defs_is) if (any_translated and defs_is) else None
+            classified = classify_and_grid(morph_rows) if morph_rows else None
             morph_html = render_morphology(
-                morph_rows, is_deponent, is_word=is_word, entry_pos=entry_pos,
+                classified, is_deponent, is_word=is_word, entry_pos=entry_pos,
                 verb_forms=verb_forms, noun_decl=noun_decl,
                 adj_decl=adj_decl, adj_form_lemma=adj_form_lemma,
-            ) if morph_rows else ''
+            ) if classified else ''
             if morph_html:
                 xml.write(morph_html + '\n')
 
             xml.write('    </d:entry>\n\n')
 
-            # Per-inflected-form stubs: every attested case/number (nominal)
-            # and every attested person/number/tense/voice (finite
-            # indicative verb) cell -- see register_stub above and the
+            # Per-inflected-form stubs: every attested case/number (nominal),
+            # case/gender/number/tense/voice (participle), case/gender/number
+            # (gerundive), tense/voice (infinitive), the supine, and every
+            # attested mood/person/number/tense/voice (finite indicative and
+            # subjunctive verb) cell -- see register_stub above and the
             # module docstring near icelandic_verb_clause.
-            if morph_rows:
+            if classified:
                 verb_slots = (verb_forms or {}).get(is_word, {}) if is_word else {}
                 noun_slots = (noun_decl or {}).get(is_word, {}) if is_word else {}
                 adj_lemma = (adj_form_lemma or {}).get(is_word, is_word) if is_word else None
                 adj_slots = (adj_decl or {}).get(adj_lemma, {}) if adj_lemma else {}
                 is_adjective = entry_pos == 'Adjective'
 
-                (noun_grid, _verb_parts, _verb_parts_any, _infinitives, _participles,
-                 _supines, _gerundives, _n_nominal, _n_verbal, verb_finite_forms) = \
-                    classify_and_grid(morph_rows)
-
-                for c, by_number in noun_grid.items():
+                for c, by_number in classified['noun_grid'].items():
                     for number, forms in by_number.items():
                         rendering = (icelandic_adj_form(c, number, adj_slots) if is_adjective
                                     else icelandic_noun_form(c, number, noun_slots))
@@ -932,12 +1187,37 @@ def build_dictionary():
                         for raw_form in forms:
                             register_stub(raw_form, lemma_display, entry_id, tags, rendering)
 
-                for raw_form, parsings in verb_finite_forms.items():
-                    for tense, voice, person, number in parsings:
+                for raw_form, parsings in classified['verb_finite_forms'].items():
+                    for mood, tense, voice, person, number in parsings:
                         rendering = icelandic_verb_clause(
                             tense, voice, is_deponent, is_word, verb_slots,
-                            person=person, number=number)
-                        tags = _verb_tag(person, number, tense, voice, is_deponent)
+                            person=person, number=number, mood=mood)
+                        tags = _verb_tag(mood, person, number, tense, voice, is_deponent)
+                        register_stub(raw_form, lemma_display, entry_id, tags, rendering)
+
+                for (tense, voice), forms in classified['infinitives'].items():
+                    rendering = icelandic_infinitive_clause(tense, voice, is_deponent, is_word, verb_slots)
+                    tags = _infinitive_tag(tense, voice, is_deponent)
+                    for raw_form in forms:
+                        register_stub(raw_form, lemma_display, entry_id, tags, rendering)
+
+                for raw_form, parsings in classified['participle_forms'].items():
+                    for case_name, gender, number, tense, voice in parsings:
+                        rendering = icelandic_participle_form(
+                            case_name, gender, number, tense, voice, is_deponent, verb_slots)
+                        tags = _participle_tag(case_name, gender, number, tense, voice, is_deponent)
+                        register_stub(raw_form, lemma_display, entry_id, tags, rendering)
+
+                for raw_form, parsings in classified['gerundive_forms'].items():
+                    for case_name, gender, number in parsings:
+                        tags = _gerundive_tag(case_name, gender, number)
+                        register_stub(raw_form, lemma_display, entry_id, tags, None)
+
+                for raw_form, case_set in classified['supine_case'].items():
+                    for c in case_set:
+                        is_purpose = c == 'nom'
+                        rendering = icelandic_supine_form(is_purpose, is_word)
+                        tags = _supine_tag(is_purpose)
                         register_stub(raw_form, lemma_display, entry_id, tags, rendering)
 
             if (index + 1) % 5000 == 0:
