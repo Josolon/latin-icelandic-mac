@@ -689,23 +689,6 @@ def build_dictionary():
             entry_id = f"ls_{rid}"
             xml.write(f'    <d:entry id="{entry_id}" d:title="{html.escape(safe_title)}">\n')
 
-            search_indices = set()
-            search_indices |= search_variants(lemma_display)
-            search_indices |= search_variants(base_key)
-
-            morph_cursor.execute(
-                'SELECT form, analyses FROM forms WHERE lemma = ? OR lemma = ?',
-                (key, base_key)
-            )
-            morph_rows = morph_cursor.fetchall()
-            for form, _ in morph_rows:
-                search_indices |= search_variants(form)
-
-            for keyword in search_indices:
-                clean_kw = sanitize_apple_key(keyword)
-                if clean_kw:
-                    xml.write(f'        <d:index d:value="{html.escape(clean_kw)}"/>\n')
-
             is_deponent = False
             try:
                 entry_el = ET.fromstring(fragment)
@@ -715,6 +698,36 @@ def build_dictionary():
                         break
             except ET.ParseError:
                 pass
+
+            search_indices = set()
+            search_indices |= search_variants(lemma_display)
+            search_indices |= search_variants(base_key)
+
+            # Morpheus lemmatizes some deponents (hortor -> horto, osculor ->
+            # osculo1) under the "notional active" 1st-principal-part spelling
+            # instead of the passive citation form L&S keys on, and some
+            # entries collide with an unrelated homonym's disambiguation digit
+            # (moror2 -> moror1) -- see deponents_recap.md in Josolon/. Only
+            # widen the lookup for entries L&S itself marks deponent, so this
+            # never changes matching for ordinary verbs.
+            morph_query = 'SELECT form, analyses FROM forms WHERE lemma = ? OR lemma = ?'
+            morph_params = [key, base_key]
+            if is_deponent:
+                morph_query += ' OR lemma GLOB ?'
+                morph_params.append(base_key + '[0-9]')
+                if base_key.endswith('or'):
+                    dep_candidate = base_key[:-1]
+                    morph_query += ' OR lemma = ? OR lemma GLOB ?'
+                    morph_params += [dep_candidate, dep_candidate + '[0-9]']
+            morph_cursor.execute(morph_query, morph_params)
+            morph_rows = morph_cursor.fetchall()
+            for form, _ in morph_rows:
+                search_indices |= search_variants(form)
+
+            for keyword in search_indices:
+                clean_kw = sanitize_apple_key(keyword)
+                if clean_kw:
+                    xml.write(f'        <d:index d:value="{html.escape(clean_kw)}"/>\n')
 
             xml.write(f'        <h1 class="entry-lemma">{html.escape(lemma_display, quote=False)}</h1>\n')
             xml.write('        <div class="definition">\n')

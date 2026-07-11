@@ -112,7 +112,7 @@ principal-part data doesn't apply (same scope decision as
 * **Icelandic-gloss-word morphology matching:** where the dictionary's own
   Icelandic gloss word has BÍN inflection data, its declined/conjugated
   form is shown inline next to the matching Latin case/tense/voice cell
-  (e.g. Latin dative singular *hesti* alongside Icelandic dative singular
+  (e.g. Latin dative singular *equō* alongside Icelandic dative singular
   *"hesti(num)"* for a noun; a Latin passive verb form alongside an
   Icelandic *"ég er ... -aður/-uð/-að"* þolmynd periphrasis) — see BÍN below.
 
