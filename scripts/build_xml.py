@@ -386,6 +386,7 @@ def classify_and_grid(rows):
 
     noun_grid = defaultdict(lambda: defaultdict(set))
     verb_parts = defaultdict(set)
+    verb_parts_any_person = defaultdict(set)
     infinitives = defaultdict(set)
     participles = defaultdict(set)
     supines = set()
@@ -420,6 +421,16 @@ def classify_and_grid(rows):
             elif tense and 'ind' in tokset and '1st' in tokset and number == 'sg':
                 verb_parts[(tense, voice or 'act')].add(form)
                 n_verbal += 1
+            elif tense and 'ind' in tokset:
+                # No 1st-singular form attested for this tense/voice in the
+                # corpus (e.g. equito's imperfect is only attested as
+                # equitabamus, 1st pl) -- kept separately from verb_parts so
+                # citation-style principal parts (which read verb_parts
+                # directly) never pick up a non-1sg form, but the tense/voice
+                # table can still show the tense instead of silently
+                # dropping it.
+                verb_parts_any_person[(tense, voice or 'act')].add(form)
+                n_verbal += 1
             elif tense:
                 n_verbal += 1
 
@@ -434,7 +445,7 @@ def classify_and_grid(rows):
                     noun_grid[case][number].add(form)
                     n_nominal += 1
 
-    return (noun_grid, verb_parts, infinitives, participles, supines,
+    return (noun_grid, verb_parts, verb_parts_any_person, infinitives, participles, supines,
             gerundives, n_nominal, n_verbal)
 
 
@@ -478,7 +489,7 @@ def _is_equiv_span(is_form):
 def render_morphology(rows, is_deponent, is_word=None, entry_pos=None,
                       verb_forms=None, noun_decl=None, adj_decl=None,
                       adj_form_lemma=None):
-    (noun_grid, verb_parts, infinitives, participles, supines,
+    (noun_grid, verb_parts, verb_parts_any_person, infinitives, participles, supines,
      gerundives, n_nominal, n_verbal) = classify_and_grid(rows)
     parts = []
 
@@ -501,8 +512,8 @@ def render_morphology(rows, is_deponent, is_word=None, entry_pos=None,
         parts.append('<tr><th>Tíð</th><th>Germynd</th><th>Þolmynd</th></tr>')
         any_tense_row = False
         for tense in TENSES:
-            act = join_forms(verb_parts.get((tense, 'act'), []))
-            pas = join_forms(verb_parts.get((tense, 'pass'), []))
+            act = join_forms(verb_parts.get((tense, 'act'), []) or verb_parts_any_person.get((tense, 'act'), []))
+            pas = join_forms(verb_parts.get((tense, 'pass'), []) or verb_parts_any_person.get((tense, 'pass'), []))
             if not act and not pas:
                 continue
             any_tense_row = True
