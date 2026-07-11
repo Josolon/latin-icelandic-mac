@@ -109,6 +109,12 @@ principal-part data doesn't apply (same scope decision as
 * **Transparency:** the full English Lewis & Short gloss is always shown
   alongside the Icelandic glossary, so nothing is silently hidden behind a
   translation guess.
+* **Icelandic-gloss-word morphology matching:** where the dictionary's own
+  Icelandic gloss word has BÍN inflection data, its declined/conjugated
+  form is shown inline next to the matching Latin case/tense/voice cell
+  (e.g. Latin dative singular *hesti* alongside Icelandic dative singular
+  *"hesti(num)"* for a noun; a Latin passive verb form alongside an
+  Icelandic *"ég er ... -aður/-uð/-að"* þolmynd periphrasis) — see BÍN below.
 
 ## 📦 Installation (For End Users)
 
@@ -127,6 +133,14 @@ principal-part data doesn't apply (same scope decision as
   [`latin-mac`](https://github.com/Josolon/latin-mac) (gitignored here, copy them over)
 * `data/IS-EN_glossary.tsv` from CLARIN Iceland (gitignored here) —
   https://repository.clarin.is/repository/xmlui/handle/20.500.12537/144
+* `data/kaikki-icelandic.jsonl` from kaikki.org (gitignored here, optional
+  supplement) — https://kaikki.org/dictionary/Icelandic/
+* [`islenska`](https://pypi.org/project/islenska/) (BÍN wrapper), installed
+  in a **project-local venv** — only `scripts/build_is_morphology.py` needs
+  it; every other script here is plain stdlib and runs with system Python:
+  ```bash
+  python3 -m venv .venv && .venv/bin/pip install islenska
+  ```
 
 ### Build steps
 
@@ -134,14 +148,21 @@ principal-part data doesn't apply (same scope decision as
 # 1. Extract raw English gloss senses from Lewis & Short
 python3 scripts/extract_glosses.py
 
-# 2. Build the Icelandic glossary from the extracted English definitions
+# 2. (Optional) Build the Wiktionary EN<->IS supplement, merged into the
+#    bridge glossary automatically if data/wikt_is.db exists
+python3 scripts/build_wiktionary_glossary.py
+
+# 3. Build the Icelandic glossary from the extracted English definitions
 python3 scripts/translate_definitions.py
 
-# 3. Generate both Apple Dictionary XML sources
+# 4. Extract Icelandic-gloss-word morphology from BÍN (inside the venv)
+source .venv/bin/activate && python3 scripts/build_is_morphology.py && deactivate
+
+# 5. Generate both Apple Dictionary XML sources
 python3 scripts/build_xml.py            # forward: Latin -> Icelandic
 python3 scripts/build_reverse_xml.py    # reverse: Icelandic -> Latin
 
-# 4. Compile and install both bundles
+# 6. Compile and install both bundles
 cd src && make install
 ```
 
@@ -158,11 +179,17 @@ latin-icelandic-mac/
 │   ├── morph.db                # Morpheus morphology [gitignored, from latin-mac]
 │   ├── IS-EN_glossary.tsv      # EN<->IS bridge glossary [gitignored, from CLARIN]
 │   ├── ls_defs.db              # Generated: raw English gloss senses [gitignored]
-│   └── ls_is.db                # Generated: Icelandic glossary [gitignored]
+│   ├── ls_is.db                # Generated: Icelandic glossary [gitignored]
+│   ├── is_noun_declension.tsv  # Generated: BÍN noun declension for gloss words
+│   ├── is_verb_forms.tsv       # Generated: BÍN verb paradigms for gloss words
+│   ├── is_adj_declension.tsv   # Generated: BÍN adjective declension for gloss words
+│   └── is_adj_form_lemma.tsv   # Generated: inflected-gloss-form -> adjective lemma
 ├── scripts/
 │   ├── latin_normalize.py      # Orthography-variant folding (macrons, i/j, u/v)
 │   ├── extract_glosses.py      # Extracts raw English gloss senses from ls.db
 │   ├── translate_definitions.py # Builds the Icelandic glossary sense-by-sense
+│   ├── build_wiktionary_glossary.py # Optional EN<->IS supplement from kaikki.org
+│   ├── build_is_morphology.py  # Extracts BÍN morphology for gloss words [needs .venv]
 │   ├── build_xml.py            # Forward direction: Latin -> Icelandic XML
 │   └── build_reverse_xml.py    # Reverse direction: Icelandic -> Latin XML
 ├── src/

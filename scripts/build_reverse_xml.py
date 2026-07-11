@@ -83,11 +83,11 @@ def build_reverse_index():
 
             deduped = dedup_spelling_variants(latin_lemmas)
 
-            xml.write(f'        <h1 class="entry-lemma">{html.escape(is_word)}</h1>\n')
+            xml.write(f'        <h1 class="entry-lemma">{html.escape(is_word, quote=False)}</h1>\n')
             xml.write('        <div class="definition">\n')
             xml.write('            <p class="gloss-en"><i>Latnesk orð / Latin words:</i></p>\n')
             xml.write('            <p class="gloss-is">')
-            xml.write(", ".join(f'<b class="la-word">{html.escape(la)}</b>' for la in sorted(deduped)))
+            xml.write(", ".join(f'<b class="la-word">{html.escape(la, quote=False)}</b>' for la in sorted(deduped)))
             xml.write('</p>\n')
             xml.write('        </div>\n')
             xml.write('    </d:entry>\n\n')

@@ -44,8 +44,17 @@ import re
 from functools import lru_cache
 
 GLOSSARY_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "IS-EN_glossary.tsv")
+WIKT_DB_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "wikt_is.db")
 
 WORD_RE = re.compile(r"[A-Za-zÀ-ÖØ-öø-ÿ]+(?:[-'][A-Za-zÀ-ÖØ-öø-ÿ]+)*")
+
+# A Wiktionary EN->IS pair is a lexicographer-written gloss, not a corpus
+# alignment -- it counts as solid evidence on its own (WIKT_EVIDENCE clears
+# MIN_EVIDENCE below, so a Wiktionary-only pair qualifies), and agreement
+# with an existing CLARIN candidate compounds both its evidence and its
+# rank (the _ranked quality bonus for wikt-confirmed candidates).
+WIKT_EVIDENCE = 8
+WIKT_BASE_SCORE = 0.4
 
 # Hand-pinned translations for closed-class words whose glossary ranking is
 # dominated by acronym/proper-noun outliers. Only consulted for words the
@@ -63,15 +72,32 @@ _PLURAL_IRREGULAR = {
     "calves": "calf", "hooves": "hoof", "thieves": "thief", "sheaves": "sheaf",
 }
 
-_table = None  # english lowercase -> {icelandic_lower: {"score","evidence","en_pos","is_pos","surface","_casing"}}
+_table = None  # english lowercase -> {icelandic_lower: {"score","evidence","en_pos","is_pos","pos_set","wikt","surface","_casing"}}
+_is_pos_map = None  # icelandic lowercase -> set of known POS (CLARIN + Wiktionary)
+
+
+def _pair_pos_ok(cand, require_is_pos):
+    """Does this specific EN->IS pair work as the required part of speech?
+
+    Checks the POS tags attached to THIS pair's rows (CLARIN rows for the
+    pair + the Wiktionary sense that produced it) before falling back to
+    word-level knowledge. The distinction matters for homographs: "líka"
+    is both an adverb ("also") and a verb ("to please") -- the pair
+    "also" -> "líka" carries only the Adverb tag, so it must fail a Verb
+    gate even though the *word* "líka" can be a verb. Word-level fallback
+    (the _is_pos_map) applies only when the pair's own rows are untagged."""
+    if cand["pos_set"]:
+        return require_is_pos in cand["pos_set"]
+    return require_is_pos in _is_pos_map.get(cand["surface"].lower(), set())
 
 
 def _load():
-    global _table
+    global _table, _is_pos_map
     if _table is not None:
         return _table
 
     _table = {}
+    _is_pos_map = {}
     with open(GLOSSARY_PATH, encoding="utf-8") as f:
         for row in csv.reader(f, delimiter="\t"):
             if len(row) < 13:
@@ -88,6 +114,8 @@ def _load():
             except ValueError:
                 evidence = 0
             is_pos, en_pos = row[2].strip(), row[3].strip()
+            if is_pos not in ("NULL", "", "Proper noun", "In compounds", "Abbreviation"):
+                _is_pos_map.setdefault(icelandic.lower(), set()).add(is_pos)
 
             bucket = _table.setdefault(english.lower(), {})
             # Dedup key is case-insensitive: "Stöð" and "stöð" for "channel"
@@ -101,6 +129,8 @@ def _load():
                 bucket[dedup_key] = {
                     "score": score, "evidence": evidence,
                     "en_pos": en_pos, "is_pos": is_pos,
+                    "pos_set": {is_pos} if is_pos not in ("NULL", "") else set(),
+                    "wikt": False,
                     "surface": icelandic, "_casing": {icelandic: evidence},
                 }
             else:
@@ -110,6 +140,8 @@ def _load():
                 cand["score"] = max(cand["score"], score)
                 cand["evidence"] += evidence
                 cand["_casing"][icelandic] = cand["_casing"].get(icelandic, 0) + evidence
+                if is_pos not in ("NULL", ""):
+                    cand["pos_set"].add(is_pos)
                 for key, val in (("en_pos", en_pos), ("is_pos", is_pos)):
                     if cand[key] in ("NULL", "", "Proper noun") and val not in ("NULL", ""):
                         cand[key] = val
@@ -121,7 +153,42 @@ def _load():
                     cand["_casing"].items(),
                     key=lambda kv: (kv[1], kv[0].islower()),
                 )[0]
+
+    _merge_wiktionary()
     return _table
+
+
+def _merge_wiktionary():
+    """Folds data/wikt_is.db (see build_wiktionary_glossary.py) into the
+    CLARIN candidate table and the POS-validation map. Optional: the build
+    still works CLARIN-only if the Wiktionary db hasn't been generated."""
+    if not os.path.exists(WIKT_DB_PATH):
+        return
+    import sqlite3
+    conn = sqlite3.connect(WIKT_DB_PATH)
+
+    for word, pos in conn.execute("SELECT word, pos FROM is_pos"):
+        if pos not in ("Proper noun",):
+            _is_pos_map.setdefault(word, set()).add(pos)
+
+    for en_key, is_word, is_pos, _gloss in conn.execute(
+            "SELECT en_key, is_word, is_pos, gloss FROM en2is"):
+        bucket = _table.setdefault(en_key, {})
+        dedup_key = is_word.lower()
+        cand = bucket.get(dedup_key)
+        if cand is None:
+            bucket[dedup_key] = {
+                "score": WIKT_BASE_SCORE, "evidence": WIKT_EVIDENCE,
+                "en_pos": "NULL", "is_pos": is_pos,
+                "pos_set": {is_pos}, "wikt": True,
+                "surface": is_word, "_casing": {is_word: WIKT_EVIDENCE},
+            }
+        else:
+            cand["evidence"] += WIKT_EVIDENCE
+            cand["score"] = max(cand["score"], WIKT_BASE_SCORE * 0.75)
+            cand["pos_set"].add(is_pos)
+            cand["wikt"] = True
+    conn.close()
 
 
 def _lemma_variants(word):
@@ -155,14 +222,27 @@ def _lemma_variants(word):
 MIN_EVIDENCE = 5
 
 
-def _ranked(en_word, cands, en_pos_hint=None, min_evidence=MIN_EVIDENCE):
+def _ranked(en_word, cands, en_pos_hint=None, min_evidence=MIN_EVIDENCE,
+            require_is_pos=None):
     """Rank a candidate dict by adjusted quality, best first. Candidates
     below min_evidence are dropped outright, not just down-weighted.
     Returns (surface_form, candidate_dict) pairs -- `cands` is keyed by the
     case-insensitive dedup key, not the display spelling; the display
-    spelling lives in candidate_dict["surface"]."""
+    spelling lives in candidate_dict["surface"].
+
+    require_is_pos (an Icelandic POS name, e.g. "Verb") is a HARD gate,
+    not a soft preference like en_pos_hint: a candidate survives only if
+    some source (its CLARIN rows or the Wiktionary POS table) attests that
+    the Icelandic word actually is that part of speech. Candidates with no
+    POS information at all are dropped too -- precision-first, the same
+    trade as everywhere else in this module: a Latin verb headword should
+    never be glossed with an Icelandic noun just because the noun happens
+    to translate some noun sense of the same English word ("amo" -> "to
+    love" -> "ást"), and an unverifiable candidate isn't worth that risk."""
     en_lower_word = en_word[0].islower() if en_word else True
     qualified = [c for c in cands.values() if c["evidence"] >= min_evidence]
+    if require_is_pos:
+        qualified = [c for c in qualified if _pair_pos_ok(c, require_is_pos)]
     if not qualified:
         return []
     has_lowercase = any(c["surface"][0].islower() for c in qualified)
@@ -181,6 +261,17 @@ def _ranked(en_word, cands, en_pos_hint=None, min_evidence=MIN_EVIDENCE):
                 q *= 1.4
             elif c["en_pos"] not in ("NULL", ""):
                 q *= 0.7
+        if c["wikt"]:
+            # Lexicographer-confirmed pair: a Wiktionary editor explicitly
+            # glossed this Icelandic word with this English word.
+            q *= 1.5
+        # Evidence weighs in alongside score: "heyra" (43 hits) and
+        # "fregna" (22 hits) both carry score 0.30 for "hear" -- the far
+        # better-attested everyday word should win the tie, and a
+        # Wiktionary-only pair (8 hits) shouldn't outrank a
+        # CLARIN+Wiktionary pair with dozens of hits ("fríður" 0.40/8 vs
+        # "góður" 0.30/57 for "good") on raw score alone.
+        q *= 1 + min(c["evidence"], 60) / 40
         return q
 
     return [(c["surface"], c) for c in sorted(qualified, key=quality, reverse=True)]
@@ -208,17 +299,17 @@ def _candidates_for(word):
 
 
 @lru_cache(maxsize=200_000)
-def top_candidates(word, en_pos_hint=None, n=2):
+def top_candidates(word, en_pos_hint=None, n=2, require_is_pos=None):
     """Up to n Icelandic candidates for one English word, best first.
     Returns a list of (icelandic, is_pos) tuples; empty if nothing trustworthy."""
     lower = word.lower()
-    if lower in _OVERRIDES:
+    if lower in _OVERRIDES and not require_is_pos:
         return [(_OVERRIDES[lower], "")]
 
     cands, _ = _candidates_for(word)
     if not cands:
         return []
-    ranked = _ranked(word, cands, en_pos_hint)
+    ranked = _ranked(word, cands, en_pos_hint, require_is_pos=require_is_pos)
     out = []
     best_score = None
     for icelandic, c in ranked:
@@ -233,7 +324,7 @@ def top_candidates(word, en_pos_hint=None, n=2):
 
 
 @lru_cache(maxsize=200_000)
-def phrase_match(phrase, en_pos_hint=None):
+def phrase_match(phrase, en_pos_hint=None, require_is_pos=None):
     """Whole-phrase glossary match only (no word-by-word reconstruction).
     These are real editorial multiword entries (idioms like "run away" ->
     "strjúka"), so they get a lower evidence bar than single-word lookups --
@@ -243,7 +334,8 @@ def phrase_match(phrase, en_pos_hint=None):
     cands = table.get(key)
     if not cands:
         return None
-    ranked = _ranked(phrase, cands, en_pos_hint, min_evidence=2)
+    ranked = _ranked(phrase, cands, en_pos_hint, min_evidence=2,
+                     require_is_pos=require_is_pos)
     if not ranked:
         return None
     return ranked[0][0]
@@ -253,11 +345,14 @@ _LEADING_ARTICLE_RE = re.compile(r"^(to|an?|the)\s+", re.IGNORECASE)
 
 
 @lru_cache(maxsize=200_000)
-def translate_glossary_phrase(phrase, en_pos_hint=None):
+def translate_glossary_phrase(phrase, en_pos_hint=None, require_is_pos=None):
     """Precision-first translation of one short gloss phrase for a glossary
     (not a sentence). Returns Icelandic text, or None if we don't have
     confident enough evidence -- callers should keep the English original in
     that case rather than force a translation.
+
+    require_is_pos threads through to the hard POS gate in _ranked: with
+    "Verb", only an Icelandic word attested as a verb can come back.
 
     Deliberately narrow: after stripping a leading "to/a/an/the" (LSJ
     infinitive/article glosses), this only succeeds for (a) an exact
@@ -280,11 +375,12 @@ def translate_glossary_phrase(phrase, en_pos_hint=None):
         # for genuine multiword idioms and would let noise back in here
         # (e.g. "shade" matching the same weakly-attested table entry that
         # top_candidates would correctly reject).
-        cands = top_candidates(tokens[0], en_pos_hint, n=1)
+        cands = top_candidates(tokens[0], en_pos_hint, n=1,
+                               require_is_pos=require_is_pos)
         return cands[0][0] if cands else None
 
     if len(tokens) > 1:
-        return phrase_match(stripped, en_pos_hint)
+        return phrase_match(stripped, en_pos_hint, require_is_pos=require_is_pos)
 
     return None
 

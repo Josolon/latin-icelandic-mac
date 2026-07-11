@@ -1,34 +1,31 @@
-"""Extract flat English gloss phrases from latin-mac's Lewis & Short TEI-XML
-(data/ls.db, table `entries`) into data/ls_defs.db, matching the shape of
-ancient-greek-mac's lsj.db `definitions` table (id, lemma, lemma_normalized,
-definitions JSON array of short English sense strings) -- so
-translate_definitions.py can bridge-translate it exactly the way it does LSJ.
+"""Extract English gloss phrases from latin-mac's Lewis & Short TEI-XML
+(data/ls.db, table `entries`) into data/ls_defs.db (id, lemma,
+lemma_normalized, definitions JSON array of short English sense strings,
+pos) for translate_definitions.py to bridge-translate.
 
-Why this step exists: unlike lsj.db, ls.db stores each entry as a raw
-<entryFree> TEI-XML fragment with a nested <sense level=... n=...> hierarchy,
-<cit> quotes, <bibl> citations, <foreign> (mostly Greek etymology) and <etym>
-spans mixed in with the actual English gloss text -- there is no ready-made
-flat list of English sense strings to translate.
+Extraction is ITALIC-FIRST: within each <sense> node, L&S typesets the
+actual English definition phrases in italics (<hi rend="ital">to like</hi>,
+<hi rend="ital">to love</hi>) while everything in plain text is editorial
+commentary, contrast notes, citations, and usage discussion ("both in the
+higher and the lower sense, opp. odisse; while diligere designates
+esteem..."). Collecting only the italic spans is what turns this from a
+wall-of-text extraction into a definition-phrase extraction -- the earlier
+naive collect-everything version translated commentary words into the
+Icelandic glossary alongside the actual meanings (dictionary soup).
 
-For each <sense> node (entry_el.iter(), so every level of the hierarchy,
-not just top-level), this collects the node's OWN text -- its direct text
-plus any non-excluded child's text -- while skipping the subtrees of
-<cit>, <bibl>, <foreign>, <etym>, and nested <sense> children entirely
-(those get walked separately when the iterator reaches them, or aren't
-English gloss text to begin with). This deliberately does NOT stop at the
-first sentence-ending punctuation the way latin-mac's own brief_text()
-does for its 150-char overview snippets -- translate_definitions.py needs
-the full comma/semicolon-split phrase list, not a truncated preview.
+Per sense, the italic spans (own spans only -- not those inside <cit>/
+<bibl>/<foreign>/<etym> subtrees or nested <sense> children, which are
+walked separately) are joined with ", " into one sense string. Spans
+containing macron/breve-marked vowels are dropped: those are quoted Latin
+words (ămans, ămanter), not English. Remaining noise (grammar
+abbreviations like "inf.", Latin function words like "quod", connectives
+like "or") is translate_definitions.py's job to filter -- same division of
+labor as before, just starting from a far higher-signal base.
 
-This is a naive, over-inclusive extraction on purpose: leftover noise (a
-bare citation like "Gell. ap. Charis p. 40 P." with no <bibl> wrapper, a
-speaker abbreviation like "Ph." from an unwrapped play-dialogue quote, a
-grammatical note like "gen. plur") is expected and is NOT filtered here --
-that's translate_definitions.py's job (citation-siglum regex, digit
-filter, short-token filter), exactly mirroring how translate_definitions.py
-already handles LSJ's own apparatus leakage. Keeping the two concerns
-separate (naive extraction here, precision-first filtering + translation
-there) avoids duplicating filtering logic in two places.
+Entries where NO sense has any italic span (rare: mostly cross-references
+like "celeriter, v. celer fin.") fall back to the old own-text extraction
+so nothing is silently dropped; translate_definitions.py's apparatus
+filters handle the extra noise in those.
 """
 import json
 import os
@@ -40,6 +37,7 @@ import xml.etree.ElementTree as ET
 from latin_normalize import norm_key
 
 LS_DB_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "ls.db")
+MORPH_DB_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "morph.db")
 OUT_DB_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "ls_defs.db")
 
 # Subtrees that are never English gloss text: quoted examples, citations,
@@ -92,17 +90,61 @@ def sense_own_text(node):
     return _clean_text("".join(parts))
 
 
+# Precomposed macron/breve vowels (any case) mark quoted Latin words inside
+# italic spans (ămans, ămanter, dī-lĭgo) -- never English gloss text.
+_LATIN_MARKED_RE = re.compile("[āăēĕīĭōŏūŭȳÿ]", re.IGNORECASE)
+
+
+def sense_italic_spans(node):
+    """The <sense> node's own <hi rend="ital"> definition phrases, in
+    document order -- excluding spans inside excluded subtrees (citations,
+    quotes, etymology) and inside nested <sense> children (walked
+    separately by the caller), and dropping quoted-Latin spans."""
+    spans = []
+
+    def walk(elem, excluded):
+        for child in elem:
+            tag = _local_tag(child)
+            if tag == "hi" and child.get("rend") == "ital" and not excluded:
+                text = _clean_text("".join(child.itertext()))
+                if text and not _LATIN_MARKED_RE.search(text):
+                    spans.append(text)
+            if tag != "sense":
+                walk(child, excluded or tag in _EXCLUDE_TAGS)
+
+    walk(node, False)
+    return spans
+
+
 def extract_entry_senses(entry_el):
-    """Returns a list of non-empty English gloss-candidate strings, one per
-    <sense> node in the entry (any level), in document order."""
-    senses = []
+    """Returns a list of [level, text] pairs, one per <sense> node in the
+    entry, in document order. `level` is L&S's own sense-hierarchy depth
+    (<sense level="1" n="I"> = a principal meaning division; level >= 2 =
+    usage/context sub-senses under it) -- translate_definitions.py builds
+    the glossary from level-1 senses only, which is what separates
+    genuinely distinct meanings (peto I. "to seek" / II. "to beseech")
+    from sense 47's courtroom idiom. Missing/garbled level attributes
+    default to 1, erring toward treating a sense as a real meaning.
+
+    Italic-first: each sense contributes its italic definition phrases
+    joined ", "; only if no sense in the whole entry has any italics does
+    the entry fall back to full own-text extraction (see module docstring)."""
+    italic_senses = []
+    fallback_senses = []
     for node in entry_el.iter():
         if _local_tag(node) != "sense":
             continue
+        try:
+            level = int(node.get("level", "1"))
+        except ValueError:
+            level = 1
+        spans = sense_italic_spans(node)
+        if spans:
+            italic_senses.append([level, ", ".join(spans)])
         text = sense_own_text(node)
         if text:
-            senses.append(text)
-    return senses
+            fallback_senses.append([level, text])
+    return italic_senses if italic_senses else fallback_senses
 
 
 # Maps L&S's <pos> abbreviation (e.g. "v. a.", "P. a.") to the CLARIN
@@ -139,15 +181,46 @@ def latin_pos_to_glossary_pos(pos_text, gen_text):
     return None
 
 
+_NOUN_GENDERS = ("f.", "m.", "n.", "comm.", "com.")
+
+def _load_morph_verb_lemmas():
+    """Set of lemmas Morpheus has conjugated (tense-marked analysis groups
+    like "(fut ind act 1st sg)") forms for. Used to infer Verb for entries
+    whose L&S XML carries no usable <pos>/<gen> marker at all: if Morpheus
+    conjugates the lemma, it's a verb. The reverse inference (declines ->
+    noun) is NOT drawn -- adjectives decline too."""
+    if not os.path.exists(MORPH_DB_PATH):
+        return set()
+    conn = sqlite3.connect(MORPH_DB_PATH)
+    verbs = {lemma for (lemma,) in conn.execute(
+        "SELECT DISTINCT lemma FROM forms WHERE analyses LIKE '%pres%'"
+        " OR analyses LIKE '%imperf%' OR analyses LIKE '%fut%'"
+        " OR analyses LIKE '%perf%'")}
+    conn.close()
+    return verbs
+
+
 def extract_entry_pos(fragment_el):
-    """Reads the entry's own top-level <pos>/<gen> child (not a nested
-    sense's), mirroring how L&S structures entryFree: pos/gen sit as direct
-    siblings of orth/itype, before the sense hierarchy starts."""
-    pos_el = fragment_el.find("pos")
-    gen_el = fragment_el.find("gen")
-    pos_text = (pos_el.text or "").strip() if pos_el is not None else None
-    gen_text = (gen_el.text or "").strip() if gen_el is not None else None
-    return latin_pos_to_glossary_pos(pos_text, gen_text)
+    """The entry's own part of speech, from the first decisive <pos> or
+    <gen> marker in document order. NOT restricted to direct children of
+    <entryFree>: L&S often opens a parenthetical note right after the
+    headword ("spes, spēi (<sense>...") and the TEI nesting swallows the
+    entry's own pos/gen into that first <sense> node. Document order is
+    what disambiguates from markers that belong to embedded derived-form
+    subentries -- pater's own <gen>m.</gen> sits right after the <itype>,
+    long before the "P. a." tag of some participle discussed under sense
+    II, so first-decisive-marker-wins picks Noun, not Adjective."""
+    for node in fragment_el.iter():
+        tag = _local_tag(node)
+        if tag == "pos":
+            mapped = latin_pos_to_glossary_pos(
+                _clean_text("".join(node.itertext())), None)
+            if mapped:
+                return mapped
+        elif tag == "gen":
+            if _clean_text("".join(node.itertext())) in _NOUN_GENDERS:
+                return "Noun"
+    return None
 
 
 def main():
@@ -173,10 +246,13 @@ def main():
     total = len(rows)
     print(f"Extracting English gloss phrases from {total} L&S entries...")
 
+    morph_verbs = _load_morph_verb_lemmas()
+
     start = time.time()
     buffer = []
     parse_fail = 0
     no_senses = 0
+    pos_from_morph = 0
     for i, (key, lemma, fragment) in enumerate(rows):
         pos = None
         try:
@@ -186,6 +262,12 @@ def main():
         except ET.ParseError:
             parse_fail += 1
             senses = []
+
+        if pos is None:
+            base_key = re.sub(r"\d+$", "", key)
+            if key in morph_verbs or base_key in morph_verbs:
+                pos = "Verb"
+                pos_from_morph += 1
 
         if not senses:
             no_senses += 1
@@ -213,6 +295,7 @@ def main():
     print(f"Done in {time.time() - start:.0f}s.")
     print(f"  Entries with at least one gloss candidate: {total - no_senses}/{total}")
     print(f"  Entries with zero sense text: {no_senses}/{total}")
+    print(f"  POS inferred from Morpheus conjugation: {pos_from_morph}/{total}")
     print(f"  TEI parse failures: {parse_fail}/{total}")
 
     ls_conn.close()

@@ -60,6 +60,24 @@ https://repository.clarin.is/repository/xmlui/handle/20.500.12537/144
 
 ---
 
+## Icelandic Target-Word Morphology — BÍN (Creative Commons Attribution-ShareAlike 4.0)
+
+The generated Icelandic morphology data (`data/is_noun_declension.tsv`,
+`data/is_verb_forms.tsv`, `data/is_adj_declension.tsv`,
+`data/is_adj_form_lemma.tsv`) is derived from BÍN and licensed under:
+
+**Creative Commons Attribution-ShareAlike 4.0 International**
+https://creativecommons.org/licenses/by-sa/4.0/
+
+**Attribution:** BÍN (Beygingarlýsing íslensks nútímamáls / Database of
+Modern Icelandic Inflection), compiled by Kristín Bjarnadóttir at the Árni
+Magnússon Institute for Icelandic Studies, via CLARIN Iceland.
+https://repository.clarin.is/repository/xmlui/handle/20.500.12537/5
+Accessed via the `islenska` PyPI package (Miðeind ehf., MIT-licensed code
+wrapping the same BÍN data).
+
+---
+
 ## Generated Icelandic Glossary & Reverse Index (Creative Commons Attribution-ShareAlike 4.0)
 
 The generated Icelandic glossary (`data/ls_is.db`) and the reverse

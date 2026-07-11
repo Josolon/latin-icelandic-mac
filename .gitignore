@@ -8,6 +8,18 @@ data/ls_defs.db
 data/ls_is.db
 data/IS-EN_glossary.tsv
 
+# Wiktionary supplement source + generated db (rebuild via
+# build_wiktionary_glossary.py; download from https://kaikki.org/dictionary/Icelandic/)
+data/kaikki-icelandic.jsonl
+data/wikt_is.db
+
+# NOTE: data/is_noun_declension.tsv, is_verb_forms.tsv, is_adj_declension.tsv,
+# is_adj_form_lemma.tsv are NOT ignored -- compact BÍN-derived TSVs (~2-6MB
+# total, see build_is_morphology.py), committed same as the other derived
+# data above the line. The raw BÍN CSV itself is never checked out at all;
+# these are built via the `islenska` PyPI package inside a project venv
+# (python3 -m venv .venv && .venv/bin/pip install islenska), not a CSV file.
+
 # Generated dictionary source XML (~55MB forward, smaller reverse)
 src/LatinIcelandicDictionary.xml
 src/IcelandicLatinDictionary.xml

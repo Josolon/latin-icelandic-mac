@@ -167,3 +167,10 @@ span.pp-label {
 span.pp-forms {
     margin-left: 6px;
 }
+
+/* BÍN-matched Icelandic-gloss-word inflection, inline after a Latin form */
+span.is-equiv {
+    color: #6a1b9a;
+    font-size: 0.88em;
+    font-style: italic;
+}
