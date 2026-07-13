@@ -5,11 +5,11 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>English</string>
 	<key>CFBundleDisplayName</key>
-	<string>la-ís</string>
+	<string>Lat-ís</string>
 	<key>CFBundleIdentifier</key>
 	<string>com.jonatansolon.dictionary.LatinIcelandic</string>
 	<key>CFBundleName</key>
-	<string>la-ís</string>
+	<string>Lat-ís</string>
 	<key>CFBundleShortVersionString</key>
 	<string>1.0</string>
 	<key>DCSDictionaryCopyright</key>
