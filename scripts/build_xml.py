@@ -119,45 +119,63 @@ ANALYSIS_GROUP_RE = re.compile(r'\(([^()]*)\)')
 #     examples reused verbatim where the target IPA value is identical.
 # ---------------------------------------------------------------------------
 
+# Descriptive terminology cross-checked against Eiríkur Rögnvaldsson,
+# Íslensk hljóðfræði (1990), https://eirikur.hi.is/hljfr.pdf -- the standard
+# Icelandic-language phonetics terminology this project uses throughout its
+# own dictionaries. Vowel height uses the source's own three-way system
+# (nálægt/miðlægt/fjarlægt = close/mid/open) extended with the transparent
+# compound "hálfnálægt" (close-mid) for the one height Icelandic's smaller
+# vowel inventory doesn't itself distinguish but Latin needs (ē/ō vs. the
+# native miðlægt e/o); frammælt/uppmælt (front/back, NOT the "framlægt/
+# afturlægt" terms an earlier draft used, which don't appear in the source
+# at all) and kringt/ókringt (rounded/unrounded) are used as given.
+# Consonant place terms (tvívaramælt, tannvaramælt -- NOT "varatannamælt",
+# tannbergsmælt, framgómmælt, uppgómmælt -- NOT the English-calque
+# "velarmælt"/"velarlokhljóð" an earlier draft used) and the sveifluhljóð
+# category for r (NOT "titurhljóð" -- the source's own r/ɾ row is
+# classified as sveifluhljóð, "flap-type", not "trill") are taken directly
+# from the source's own consonant chart. qu/v are lip-ROUNDED ([kʷ]/[w]),
+# corrected from an earlier draft's backwards "varaglennt" (lip-spread) to
+# "varakringt".
 _PRONUNCIATION_VOWELS = [
-    ("ă", "/a/", "stutt, opið miðlægt sérhljóð", "a í aska"),
-    ("ā", "/aː/", "langt, opið miðlægt sérhljóð", "a í aka"),
-    ("ĕ", "/ɛ/", "stutt, hálfopið framlægt ókringt sérhljóð", "e í enda"),
-    ("ē", "/eː/", "langt, hálflokað framlægt ókringt sérhljóð (þéttara en ísl. langt e)", "e í þ. Weg"),
-    ("ae", "/ai̯/", "tvíhljóð: opið miðlægt → lokað framlægt", "æ í sæll"),
-    ("au", "/au̯/", "tvíhljóð: opið miðlægt → lokað afturlægt", "á í sá"),
-    ("oe", "/oi̯/", "tvíhljóð: hálflokað afturlægt → lokað framlægt (sjaldgæft)", "o í e. boy"),
-    ("ĭ", "/ɪ/", "stutt, lokað framlægt ókringt sérhljóð", "i í ilma"),
-    ("ī", "/iː/", "langt, lokað framlægt ókringt sérhljóð", "í í líta"),
-    ("ŏ", "/ɔ/", "stutt, hálflokað afturlægt kringt sérhljóð", "o í sofa"),
-    ("ō", "/oː/", "langt, hálflokað afturlægt kringt sérhljóð (þéttara en ísl. langt o)", "o í þ. Boot"),
-    ("ŭ", "/ʊ/", "stutt, hálflokað afturlægt kringt sérhljóð (slakara en ísl. ú)", "u í e. put"),
-    ("ū", "/uː/", "langt, lokað afturlægt kringt sérhljóð", "ú í búa"),
-    ("y̆", "/ʏ/", "stutt, lokað framlægt kringt sérhljóð (grískt tökuorð)", "u í sund"),
-    ("ȳ", "/yː/", "langt, lokað framlægt kringt sérhljóð (grískt tökuorð, sjaldgæft)", "ü í þ. über"),
+    ("ă", "/a/", "stutt, fjarlægt, uppmælt sérhljóð", "a í aska"),
+    ("ā", "/aː/", "langt, fjarlægt, uppmælt sérhljóð", "a í aka"),
+    ("ĕ", "/ɛ/", "stutt, miðlægt, frammælt, ókringt sérhljóð", "e í enda"),
+    ("ē", "/eː/", "langt, hálfnálægt, frammælt, ókringt sérhljóð (þéttara en ísl. miðlægt e)", "e í þ. Weg"),
+    ("ae", "/ai̯/", "tvíhljóð: fjarlægt sérhljóð → nálægt, frammælt sérhljóð", "æ í sæll"),
+    ("au", "/au̯/", "tvíhljóð: fjarlægt sérhljóð → nálægt, uppmælt, kringt sérhljóð", "á í sá"),
+    ("oe", "/oi̯/", "tvíhljóð: miðlægt, uppmælt, kringt → nálægt, frammælt sérhljóð (sjaldgæft)", "o í e. boy"),
+    ("ĭ", "/ɪ/", "stutt, nálægt, frammælt, ókringt sérhljóð", "i í ilma"),
+    ("ī", "/iː/", "langt, nálægt, frammælt, ókringt sérhljóð", "í í líta"),
+    ("ŏ", "/ɔ/", "stutt, miðlægt, uppmælt, kringt sérhljóð", "o í sofa"),
+    ("ō", "/oː/", "langt, hálfnálægt, uppmælt, kringt sérhljóð (þéttara en ísl. miðlægt o)", "o í þ. Boot"),
+    ("ŭ", "/ʊ/", "stutt, hálfnálægt, uppmælt, kringt sérhljóð (slakara en ísl. ú)", "u í e. put"),
+    ("ū", "/uː/", "langt, nálægt, uppmælt, kringt sérhljóð", "ú í búa"),
+    ("y̆", "/ʏ/", "stutt, nálægt, frammælt, kringt sérhljóð (grískt tökuorð)", "u í sund"),
+    ("ȳ", "/yː/", "langt, nálægt, frammælt, kringt sérhljóð (grískt tökuorð, sjaldgæft)", "ü í þ. über"),
 ]
 _PRONUNCIATION_CONSONANTS = [
     ("b", "/b/", "raddað tvívaramælt lokhljóð", "b í e. bad"),
     ("d", "/d/", "raddað tannbergsmælt lokhljóð", "d í fr. deux"),
-    ("f", "/f/", "óraddað varatannamælt önghljóð", "f í fara"),
-    ("g", "/ɡ/", "raddað velarlokhljóð (alltaf hart -- aldrei mýkt fyrir e/i)", "g í fr. garçon"),
+    ("f", "/f/", "óraddað tannvaramælt önghljóð", "f í fara"),
+    ("g", "/ɡ/", "raddað uppgómmælt lokhljóð (alltaf hart -- aldrei mýkt fyrir e/i)", "g í fr. garçon"),
     ("h", "/h/", "óraddað raddbandaönghljóð", "h í hestur"),
-    ("j", "/j/", "raddaður framgómmælt nálgunarhljóð", "j í já"),
-    ("c/k/qu-", "/k/", "óraddað ófráblásið velarlokhljóð", "g í gæti"),
+    ("j", "/j/", "raddað framgómmælt önghljóð", "j í já"),
+    ("c/k/qu-", "/k/", "óraddað ófráblásið uppgómmælt lokhljóð", "g í gæti"),
     ("l (fyrir i/y, eða tvöfalt ll)", "/l/", "\"l exilis\": raddað, óvelarað tannbergsmælt hliðarhljóð", "l í lilja"),
     ("l (annars staðar)", "/ɫ/", "\"l pinguis\": raddað, velarað tannbergsmælt hliðarhljóð", "l í e. milk"),
     ("m", "/m/", "raddað tvívaramælt nefhljóð", "m í mæla"),
     ("n", "/n/", "raddað tannbergsmælt nefhljóð", "n í næla"),
-    ("n á undan g/qu (gn)", "/ŋ/", "velarmælt nefhljóð", "n í langur"),
+    ("n á undan g/qu (gn)", "/ŋ/", "uppgómmælt nefhljóð", "n í langur"),
     ("p", "/p/", "óraddað ófráblásið tvívaramælt lokhljóð", "b í bera"),
     ("ph", "/pʰ/", "óraddað fráblásið tvívaramælt lokhljóð (grískt tökuorð)", "p í pera"),
-    ("qu", "/kʷ/", "varaglenntur, óraddaður velarlokhljóðsklasi", "qu í e. quick"),
-    ("r", "/r/", "raddað tannbergsmælt titurhljóð", "r í vor"),
+    ("qu", "/kʷ/", "varakringt, óraddað uppgómmælt lokhljóð", "qu í e. quick"),
+    ("r", "/r/", "raddað tannbergsmælt sveifluhljóð", "r í vor"),
     ("s", "/s/", "óraddað tannbergsmælt önghljóð", "s í sofa"),
     ("t", "/t/", "óraddað ófráblásið tannbergsmælt lokhljóð", "d í döf"),
     ("th", "/tʰ/", "óraddað fráblásið tannbergsmælt lokhljóð (grískt tökuorð)", "t í töf"),
-    ("v", "/w/", "varaglenntur, raddaður nálgunarhljóð (EKKI ísl./e. v-hljóð)", "v í e. wine"),
-    ("x", "/ks/", "óraddað velarlokhljóð + tannbergsmælt önghljóð", "x í lax"),
+    ("v", "/w/", "varakringt, raddað nálgunarhljóð (EKKI ísl./e. v-hljóð)", "v í e. wine"),
+    ("x", "/ks/", "óraddað uppgómmælt lokhljóð + tannbergsmælt önghljóð", "x í lax"),
     ("z", "/dz/", "raddað tannbergsmælt affrikata (grískt tökuorð)", ""),
 ]
 
