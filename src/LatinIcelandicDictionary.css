@@ -19,6 +19,14 @@ h1.entry-lemma {
     letter-spacing: 0.02em;
 }
 
+/* --- Entry Preamble (pronunciation guide subtitle) --- */
+.entry-preamble {
+    margin: 2px 0 8px 0;
+    color: #444;
+    font-style: italic;
+    font-size: 0.95em;
+}
+
 /* --- Definition Block --- */
 div.definition {
     margin: 6px 0 12px 0;

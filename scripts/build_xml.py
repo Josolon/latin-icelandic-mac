@@ -70,6 +70,162 @@ ENCLITICS = ('que', 'ne', 've', 'ue', 'st', 'n')
 ANALYSIS_GROUP_RE = re.compile(r'\(([^()]*)\)')
 
 # ---------------------------------------------------------------------------
+# Reconstructed Classical Latin pronunciation guide (Vox Latina, W. Sidney
+# Allen), mapped onto Icelandic anchor words -- ported from the identical
+# pattern in ancient-greek-icelandic-mac's write_pronunciation_guide_entry
+# (see phonology-recap.md in Josolon/ for the phoneme inventory this is
+# built from -- the same one scripts/build_xml.py's own latin_to_ipa engine
+# in the sibling latin-mac project implements). A hand-authored reference
+# entry, not derived from ls.db/morph.db.
+#
+# Icelandic anchor-word choices, verified against Icelandic phonology (not
+# assumed from spelling) rather than reused blind from the Greek table --
+# though several genuinely ARE the same anchor, because the underlying
+# target sound is identical:
+#   - Icelandic has NO voiced stops at all (b/d/g spell voiceless
+#     UNASPIRATED [p t k] -- Icelandic contrasts aspiration, not voicing).
+#     This cuts both ways: it rules Icelandic out for Latin's genuinely
+#     voiced b/d/g/v (foreign anchor needed), but makes Icelandic's own
+#     b/d/g the correct anchor for Latin's plain unaspirated p/t/k=c, and
+#     Icelandic's (word-initial-aspirated) p/t/k the correct anchor for
+#     Latin's aspirated ph/th/ch -- same reasoning the Greek table already
+#     applies to π/φ and κ/χ, so those four rows reuse its exact anchors.
+#   - Icelandic vowel length is positional, not a separate phoneme per
+#     letter (stressed vowel + single following consonant = long; + 2+
+#     consonants = short) -- verified via en.wikipedia.org/wiki/Icelandic_orthography.
+#     This gives real minimal-pair anchors for Latin's phonemic short/long
+#     vowel pairs (aska/aka for a/ā, matching the Greek table's own
+#     α/ᾱ choice) without needing a foreign example.
+#   - á/æ/ó/au/ei are diphthongized in modern Icelandic (á=[au̯], æ=[ai̯],
+#     ó=[ou̯]) -- confirmed against the same source -- which is what makes
+#     æ/á excellent native anchors for Latin's ae/au diphthongs, but rules
+#     Icelandic out for Latin's plain long ē/ō (Icelandic has no plain
+#     [eː]/[oː] monophthong at all) and short y/ȳ (Icelandic y merged onto
+#     i=[ɪ], NOT the front-rounded [ʏ]/[yː] Latin y needs -- Icelandic's
+#     own short U is the front-rounded [ʏ] instead, an unintuitive
+#     letter-swap worth getting right rather than assuming from spelling).
+#   - Latin's true-length geminates (pp, ll, ss...) have no Icelandic
+#     equivalent: Icelandic's own doubled letters are realized as
+#     preaspiration (pp/tt/kk -> [ʰp ʰt ʰk]) or pre-stopping (ll/nn in some
+#     environments -> [tl]/[tn]), never held-twice-as-long the way Latin's
+#     are -- so no geminate consonant row is included at all, rather than
+#     showing a misleading Icelandic "double letter" that isn't actually
+#     length. Same conclusion the Greek project's own table reached for
+#     its λλ/νν rows (see phonology-recap.md's Icelandic section).
+#   - Where Icelandic genuinely has no match (voiced stops, /w/, /ʊ/, the
+#     rare Greek-loanword ȳ/z, the oe diphthong), a foreign loanword is
+#     used instead, prefixed with its language ("e." enska, "þ." þýska,
+#     "fr." franska) -- same convention as the Greek table, several
+#     examples reused verbatim where the target IPA value is identical.
+# ---------------------------------------------------------------------------
+
+_PRONUNCIATION_VOWELS = [
+    ("ă", "/a/", "stutt, opið miðlægt sérhljóð", "a í aska"),
+    ("ā", "/aː/", "langt, opið miðlægt sérhljóð", "a í aka"),
+    ("ĕ", "/ɛ/", "stutt, hálfopið framlægt ókringt sérhljóð", "e í enda"),
+    ("ē", "/eː/", "langt, hálflokað framlægt ókringt sérhljóð (þéttara en ísl. langt e)", "e í þ. Weg"),
+    ("ae", "/ai̯/", "tvíhljóð: opið miðlægt → lokað framlægt", "æ í sæll"),
+    ("au", "/au̯/", "tvíhljóð: opið miðlægt → lokað afturlægt", "á í sá"),
+    ("oe", "/oi̯/", "tvíhljóð: hálflokað afturlægt → lokað framlægt (sjaldgæft)", "o í e. boy"),
+    ("ĭ", "/ɪ/", "stutt, lokað framlægt ókringt sérhljóð", "i í ilma"),
+    ("ī", "/iː/", "langt, lokað framlægt ókringt sérhljóð", "í í líta"),
+    ("ŏ", "/ɔ/", "stutt, hálflokað afturlægt kringt sérhljóð", "o í sofa"),
+    ("ō", "/oː/", "langt, hálflokað afturlægt kringt sérhljóð (þéttara en ísl. langt o)", "o í þ. Boot"),
+    ("ŭ", "/ʊ/", "stutt, hálflokað afturlægt kringt sérhljóð (slakara en ísl. ú)", "u í e. put"),
+    ("ū", "/uː/", "langt, lokað afturlægt kringt sérhljóð", "ú í búa"),
+    ("y̆", "/ʏ/", "stutt, lokað framlægt kringt sérhljóð (grískt tökuorð)", "u í sund"),
+    ("ȳ", "/yː/", "langt, lokað framlægt kringt sérhljóð (grískt tökuorð, sjaldgæft)", "ü í þ. über"),
+]
+_PRONUNCIATION_CONSONANTS = [
+    ("b", "/b/", "raddað tvívaramælt lokhljóð", "b í e. bad"),
+    ("d", "/d/", "raddað tannbergsmælt lokhljóð", "d í fr. deux"),
+    ("f", "/f/", "óraddað varatannamælt önghljóð", "f í fara"),
+    ("g", "/ɡ/", "raddað velarlokhljóð (alltaf hart -- aldrei mýkt fyrir e/i)", "g í fr. garçon"),
+    ("h", "/h/", "óraddað raddbandaönghljóð", "h í hestur"),
+    ("j", "/j/", "raddaður framgómmælt nálgunarhljóð", "j í já"),
+    ("c/k/qu-", "/k/", "óraddað ófráblásið velarlokhljóð", "g í gæti"),
+    ("l (fyrir i/y, eða tvöfalt ll)", "/l/", "\"l exilis\": raddað, óvelarað tannbergsmælt hliðarhljóð", "l í lilja"),
+    ("l (annars staðar)", "/ɫ/", "\"l pinguis\": raddað, velarað tannbergsmælt hliðarhljóð", "l í e. milk"),
+    ("m", "/m/", "raddað tvívaramælt nefhljóð", "m í mæla"),
+    ("n", "/n/", "raddað tannbergsmælt nefhljóð", "n í næla"),
+    ("n á undan g/qu (gn)", "/ŋ/", "velarmælt nefhljóð", "n í langur"),
+    ("p", "/p/", "óraddað ófráblásið tvívaramælt lokhljóð", "b í bera"),
+    ("ph", "/pʰ/", "óraddað fráblásið tvívaramælt lokhljóð (grískt tökuorð)", "p í pera"),
+    ("qu", "/kʷ/", "varaglenntur, óraddaður velarlokhljóðsklasi", "qu í e. quick"),
+    ("r", "/r/", "raddað tannbergsmælt titurhljóð", "r í vor"),
+    ("s", "/s/", "óraddað tannbergsmælt önghljóð", "s í sofa"),
+    ("t", "/t/", "óraddað ófráblásið tannbergsmælt lokhljóð", "d í döf"),
+    ("th", "/tʰ/", "óraddað fráblásið tannbergsmælt lokhljóð (grískt tökuorð)", "t í töf"),
+    ("v", "/w/", "varaglenntur, raddaður nálgunarhljóð (EKKI ísl./e. v-hljóð)", "v í e. wine"),
+    ("x", "/ks/", "óraddað velarlokhljóð + tannbergsmælt önghljóð", "x í lax"),
+    ("z", "/dz/", "raddað tannbergsmælt affrikata (grískt tökuorð)", ""),
+]
+
+# Same "LETTER í WORD" auto-italicization convention as the Greek table --
+# see _render_anchor_html.
+_LEADING_ANCHOR_RE = re.compile(r'^(\S+) í ')
+
+
+def _render_anchor_html(text):
+    if not text:
+        return '—'
+    m = _LEADING_ANCHOR_RE.match(text)
+    if not m:
+        return html.escape(text, quote=False)
+    lead = html.escape(m.group(1), quote=False)
+    rest = html.escape(text[m.end():], quote=False)
+    return f'<i>{lead}</i> í {rest}'
+
+
+def write_pronunciation_guide_entry(xml):
+    """A hand-authored reference entry (not derived from ls.db/morph.db)
+    mapping reconstructed Classical Latin pronunciation onto Icelandic
+    anchor words -- see _PRONUNCIATION_VOWELS/_PRONUNCIATION_CONSONANTS
+    above."""
+    entry_id = "pronunciation_guide"
+    title = "Framburður latínu"
+    xml.write(f'    <d:entry id="{entry_id}" d:title="{html.escape(title)}">\n')
+    for keyword in (title, "framburður", "framburður latínu",
+                    "íslenskur framburður latínu", "pronunciation",
+                    "pronunciation guide", "frambur"):
+        xml.write(f'        <d:index d:value="{html.escape(keyword)}"/>\n')
+    xml.write(f'        <h1 class="entry-lemma">{html.escape(title)}</h1>\n')
+    xml.write('        <p class="entry-preamble">Handbók fyrir íslenskumælandi</p>\n')
+    xml.write('        <div class="definition">\n')
+    xml.write(
+        '            <p class="gloss-is">Endursköpuð klassísk latína (um 1. öld f. Kr. – 1. öld e. Kr.) '
+        'skv. W. Sidney Allen, <i>Vox Latina</i>. Aðeins orð sem Lewis &amp; Short merkir með lengdar- '
+        'eða styttingarmerki (ā/ă) fá sýndan framburð annars staðar í þessari orðabók -- ómerkt sérhljóð '
+        'er of ótryggt til að giska á lengd þess. Íslenska hefur enga raddaða lokhljóða (b/d/g eru í '
+        'raun óraddaðir, ófráblásnir [p t k]), svo erlend (ensk/þýsk/frönsk) hjálparorð eru notuð fyrir '
+        'latnesku raddhljóðin b/d/g/v. Sérhljóð á undan n eða m sem sjálft stendur í lok orðs, eða á '
+        'undan s/f, nefkveðast og samhljóðið fellur brott (t.d. <i>etiam</i> → [ɛ.ti.ãː]); tvöfaldir '
+        'samhljóðar (pp, ll, ss o.fl.) eru sannarlega tvöfalt lengri en einfaldir, ólíkt íslenskum '
+        'tvöföldum bókstöfum sem tákna forblástur eða forstopp fremur en lengd, svo þeir fá ekki eigin '
+        'línu hér. Áhersla fellur á næstsíðasta atkvæði ef það er þungt, annars á þriðja aftast.</p>\n')
+
+    def _write_table(heading, rows):
+        xml.write('            <div class="morph-section">\n')
+        xml.write(f'                <p class="morph-label">{html.escape(heading)}</p>\n')
+        xml.write('                <table class="morphology-table">\n')
+        xml.write('                    <tr><th>Tákn</th><th>IPA</th><th>Hljóðlýsing</th>'
+                   '<th>Íslenskt hjálpardæmi</th></tr>\n')
+        for symbol, ipa, description, anchor in rows:
+            xml.write(
+                f'                    <tr><td class="case-label">{html.escape(symbol, quote=False)}</td>'
+                f'<td>{html.escape(ipa, quote=False)}</td>'
+                f'<td>{html.escape(description, quote=False)}</td>'
+                f'<td>{_render_anchor_html(anchor)}</td></tr>\n')
+        xml.write('                </table>\n')
+        xml.write('            </div>\n')
+
+    _write_table("Sérhljóð og tvíhljóð", _PRONUNCIATION_VOWELS)
+    _write_table("Samhljóð", _PRONUNCIATION_CONSONANTS)
+    xml.write('        </div>\n')
+    xml.write('    </d:entry>\n\n')
+
+
+# ---------------------------------------------------------------------------
 # BÍN-sourced Icelandic-gloss-word morphology matching -- ported from
 # ancient-greek-icelandic-mac/scripts/build_xml.py (see that project and
 # bin-morphology-recap.md for the full design rationale: real inflection
@@ -1260,6 +1416,8 @@ def build_dictionary():
 
             if (i + 1) % 20000 == 0:
                 print(f"   ... {i + 1}/{len(form_stub_candidates)} stub entries")
+
+        write_pronunciation_guide_entry(xml)
 
         xml.write('</d:dictionary>\n')
 
